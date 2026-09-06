@@ -18,7 +18,9 @@ from pathlib import Path
 from typing import Any
 
 SPEC = "QNM-BUILD-1.0"
-COMPANION = "AIH-WP-1.1"
+COMPANION = "AIH-WP-1.3"
+HUB_LAW = "AIH-WP-1.1"
+PAIR_SPEC = "AIH-WP-1.3"
 AUTHOR = "Aziel Eliab"
 IDENTITY = "Aziel Eliab"
 LOCK_DIR = "locks"

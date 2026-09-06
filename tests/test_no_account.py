@@ -104,3 +104,7 @@ def test_cfg_forbids_completeness_symbols() -> None:
     assert "lattice_online" in data  # refuse list only
     assert '"live_from_site_ping": false' in data
     assert '"score_reads_views": false' in data
+    assert "AIH-WP-1.3" in data
+    assert "QNM-BUILD-1.0" in data
+    assert '"bell_pair": false' in data
+    assert '"qubit": false' in data

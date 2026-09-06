@@ -1,10 +1,11 @@
-"""Local node process — QNM-BUILD-1.0 §5.
+"""Local node process — QNM-BUILD-1.0 §5 + AIH-WP-1.3 pair-bind.
 
 State: COLD → LOCAL → LIVE (operator bearer) → DEGRADED → ISOLATED
 → PHOENIX_LOCK → SCORCHED.
 
 No auto-heal. No LIVE from site ping. Local API binds 127.0.0.1 only.
-Receipts go to disk. Radios stay off.
+Receipts go to disk. Radios stay off. Pair-id is medium-independent
+(AIH-WP-1.3). Isolation cuts pair edges. Not Bell-pair physics.
 """
 
 from __future__ import annotations
@@ -22,7 +23,9 @@ from qnm.bearers import Bearers
 from qnm.boot import (
     AUTHOR,
     COMPANION,
+    HUB_LAW,
     IDENTITY,
+    PAIR_SPEC,
     SPEC,
     QNMRefuse,
     install,
@@ -34,8 +37,10 @@ from qnm.boot import (
 from qnm.chain import Chain
 from qnm.memorial import Memorial
 from qnm.outbox import Outbox
+from qnm.pairs import HOP_MAX_DEFAULT, Pairs
 from qnm.phoenix import Phoenix
 from qnm.score import score_local
+from qnm.spiderweb import Spiderweb
 from qnm.tethers import Tethers
 
 STATES = (
@@ -66,6 +71,9 @@ LOCAL_PATHS = {
     "/local/state",
     "/local/bearer",
     "/local/tether",
+    "/local/pair",
+    "/local/pairs",
+    "/local/forward",
     "/local/ingress",
     "/local/outbox",
     "/local/outbox/cut",
@@ -85,6 +93,7 @@ def load_cfg(root: Path) -> dict[str, Any]:
         return {
             "spec": SPEC,
             "companion": COMPANION,
+            "hub_law": HUB_LAW,
             "author": AUTHOR,
             "bind": DEFAULT_BIND,
             "port": DEFAULT_PORT,
@@ -113,6 +122,8 @@ class Node:
         self.tethers = Tethers(self.root)
         self.phoenix = Phoenix()
         self.memorial = Memorial(self.root)
+        self.pairs = Pairs(self.memorial)
+        self.spiderweb: Spiderweb | None = None
         self._receipt_dir = self.root / "data" / "receipts"
         self._receipt_dir.mkdir(parents=True, exist_ok=True)
         self._receipt_log = self._receipt_dir / "receipts.jsonl"
@@ -170,12 +181,18 @@ class Node:
             "author": self.author,
             "spec": self.spec,
             "companion": COMPANION,
+            "hub_law": HUB_LAW,
+            "pair_bind": PAIR_SPEC,
             "bearers": self.bearers.snapshot(),
             "radios": "off",
             "auto_heal": False,
             "live_from_site_ping": False,
             "phoenix": self.phoenix.status(),
             "tethers": self.tethers.list(),
+            "pairs": self.pairs.list(),
+            "hop_max": HOP_MAX_DEFAULT,
+            "bell_pair": False,
+            "qubit": False,
             "outbox": self.outbox.list(),
             "chain": {"ok": chain["ok"], "length": chain["length"], "tip": chain["tip"]},
             "bind": DEFAULT_BIND,
@@ -259,7 +276,11 @@ class Node:
                 raise QNMRefuse("QNM-TAMPER-ISOLATE", f"cannot isolate from {self.state}")
             self._advance("ISOLATED")
         self.bearers.drop_all_except_local()
-        self._write_receipt("tamper_isolate", {"reason": reason, "state": self.state})
+        cut = self.pairs.cut_all()
+        self._write_receipt(
+            "tamper_isolate",
+            {"reason": reason, "state": self.state, "pairs_cut": cut["cut_count"]},
+        )
         return self.snapshot()
 
     def check_tamper(self) -> dict[str, Any]:
@@ -273,7 +294,11 @@ class Node:
         self.phoenix.arm()
         self._advance("PHOENIX_LOCK")
         self.bearers.drop_all_except_local()
-        self._write_receipt("phoenix_arm", {"waiting": "local", "controller_hunt": False})
+        cut = self.pairs.cut_all()
+        self._write_receipt(
+            "phoenix_arm",
+            {"waiting": "local", "controller_hunt": False, "pairs_cut": cut["cut_count"]},
+        )
         snap = self.snapshot()
         snap["phoenix"] = self.phoenix.status()
         return snap
@@ -285,7 +310,9 @@ class Node:
             if self.state != "PHOENIX_LOCK":
                 self._advance("PHOENIX_LOCK")
         install_root = self.install_root or ""
-        memorial = self.memorial.write(install_root, reason)
+        pair_ids = self.pairs.ids()
+        memorial = self.memorial.write(install_root, reason, pairs_cut=pair_ids)
+        self.pairs.cut_all()
         self.outbox.clear()
         self.tethers.clear()
         self.bearers.drop_all_except_local()
@@ -322,6 +349,112 @@ class Node:
         self._write_receipt("tether_cut", {"src": src, "dst": dst, "residue": False})
         return result
 
+    def _require_pairable(self) -> None:
+        self._require_not_scorched()
+        if self.state in ("COLD", "ISOLATED", "PHOENIX_LOCK"):
+            raise QNMRefuse("AIH-NO-EDGES", f"no pair in {self.state}")
+        if not self.install_root:
+            raise QNMRefuse("AIH-HANDSHAKE", "boot before pair-bind")
+
+    def pair_offer(
+        self,
+        peer_root: str,
+        nonce: bytes | str | None = None,
+        via: str | None = None,
+    ) -> dict[str, Any]:
+        self._require_pairable()
+        rec = self.pairs.offer(
+            root_a=self.install_root or "",
+            peer_root=peer_root,
+            nonce_a=nonce,
+            via=via,
+        )
+        self._write_receipt("pair_offer", {"peer": peer_root, "via": via or ""})
+        return rec
+
+    def pair_accept(
+        self,
+        offer: dict[str, Any],
+        nonce: bytes | str | None = None,
+        via: str | None = None,
+    ) -> dict[str, Any]:
+        self._require_pairable()
+        rec = self.pairs.accept(
+            offer,
+            root_b=self.install_root or "",
+            nonce_b=nonce,
+            via=via,
+        )
+        self._write_receipt("pair_accept", {"pair_id": rec["pair_id"], "via": via or ""})
+        return rec
+
+    def pair_seal(self, handshake: dict[str, Any], via: str | None = None) -> dict[str, Any]:
+        self._require_pairable()
+        rec = self.pairs.seal(handshake, self_root=self.install_root or "", via=via)
+        self._write_receipt(
+            "pair_seal",
+            {
+                "pair_id": rec["pair_id"],
+                "bearer_id": rec.get("bearer_id") or "",
+                "marriage_license": False,
+                "medium_independent": True,
+            },
+        )
+        return rec
+
+    def pair_cut(self, pair_id: str) -> dict[str, Any]:
+        self._require_not_scorched()
+        result = self.pairs.cut(pair_id)
+        self._write_receipt("pair_cut", {"pair_id": pair_id, "operator": True})
+        return result
+
+    def _queue_path_wait(self, frame: dict[str, Any], via: str) -> dict[str, Any]:
+        """Wi-Fi / hop bearer dies → path gone, bind remains. Waiting is not death."""
+        item = self.outbox.queue(
+            "spiderweb-frame",
+            {
+                "frame": frame,
+                "via": via,
+                "path": "gone",
+                "bind_remains": True,
+                "death": False,
+                "waiting": True,
+            },
+        )
+        self._write_receipt(
+            "spiderweb_wait",
+            {"id": item["id"], "via": via, "death": False, "bind_remains": True},
+        )
+        return {
+            "ok": True,
+            "waiting": True,
+            "death": False,
+            "bind_remains": True,
+            "path": "gone",
+            "outbox_id": item["id"],
+            "via": via,
+            "code": "AIH-PATH-WAIT",
+            "spec": PAIR_SPEC,
+            "companion": SPEC,
+            "author": AUTHOR,
+        }
+
+    def forward(
+        self,
+        dest: str,
+        payload: dict[str, Any] | bytes | str,
+        *,
+        via: str | None = None,
+        hop_max: int = HOP_MAX_DEFAULT,
+        seen: list[str] | None = None,
+        mesh: Spiderweb | None = None,
+    ) -> dict[str, Any]:
+        self._require_pairable()
+        web = mesh or self.spiderweb or Spiderweb()
+        if self.install_root and str(self.install_root).lower() not in web.nodes:
+            web.attach(self)
+        return web.forward(self, dest, payload, via=via, hop_max=hop_max, seen=seen)
+
     def queue_outbox(self, kind: str, payload: dict[str, Any] | None = None) -> dict[str, Any]:
         self._require_active()
         item = self.outbox.queue(kind, payload)
@@ -349,6 +482,32 @@ class Node:
             if action == "cut":
                 return self.cut_tether(src, dst)
             return self.declare_tether(src, dst)
+        if op == "pair":
+            action = str(payload.get("action") or payload.get("phase") or "offer")
+            if action == "cut":
+                return self.pair_cut(str(payload.get("pair_id") or ""))
+            if action == "offer":
+                return self.pair_offer(
+                    str(payload.get("peer") or payload.get("root_b") or ""),
+                    nonce=payload.get("nonce") or payload.get("nonce_a"),
+                    via=payload.get("via"),
+                )
+            if action == "accept":
+                return self.pair_accept(
+                    dict(payload.get("offer") or payload),
+                    nonce=payload.get("nonce") or payload.get("nonce_b"),
+                    via=payload.get("via"),
+                )
+            if action == "seal":
+                return self.pair_seal(dict(payload.get("accept") or payload), via=payload.get("via"))
+            raise QNMRefuse("AIH-HANDSHAKE", f"unknown pair action:{action}")
+        if op == "forward":
+            return self.forward(
+                str(payload.get("dest") or ""),
+                dict(payload.get("payload") or payload),
+                via=payload.get("via"),
+                hop_max=int(payload.get("hop_max") or HOP_MAX_DEFAULT),
+            )
         self._write_receipt("ingress", {"op": op})
         return {"ok": True, "admitted": True, "op": op, "state": self.state}
 
@@ -397,6 +556,16 @@ class Node:
             return {"ok": True, "receipts": self.receipts(), "spec": SPEC, "author": AUTHOR}
         if route == "/local/outbox" and method == "GET":
             return {"ok": True, "outbox": self.outbox.list(), "visible": True}
+        if route == "/local/pairs" and method == "GET":
+            return {
+                "ok": True,
+                "pairs": self.pairs.list(),
+                "spec": PAIR_SPEC,
+                "companion": SPEC,
+                "bell_pair": False,
+                "qubit": False,
+                "author": AUTHOR,
+            }
         if route == "/local/boot" and method == "POST":
             payload = json.loads(body.decode("utf-8") or "{}") if body else {}
             entropy = bytes.fromhex(payload["entropy"]) if payload.get("entropy") else None
@@ -420,6 +589,37 @@ class Node:
             if op == "cut":
                 return self.cut_tether(src, dst)
             return self.declare_tether(src, dst)
+        if route == "/local/pair" and method == "POST":
+            payload = json.loads(body.decode("utf-8") or "{}") if body else {}
+            op = str(payload.get("op") or payload.get("phase") or "offer")
+            if op == "cut":
+                return self.pair_cut(str(payload.get("pair_id") or ""))
+            if op == "offer":
+                return self.pair_offer(
+                    str(payload.get("peer") or payload.get("root_b") or ""),
+                    nonce=payload.get("nonce") or payload.get("nonce_a"),
+                    via=payload.get("via"),
+                )
+            if op == "accept":
+                return self.pair_accept(
+                    dict(payload.get("offer") or payload),
+                    nonce=payload.get("nonce") or payload.get("nonce_b"),
+                    via=payload.get("via"),
+                )
+            if op == "seal":
+                return self.pair_seal(
+                    dict(payload.get("accept") or payload),
+                    via=payload.get("via"),
+                )
+            raise QNMRefuse("AIH-HANDSHAKE", f"unknown pair op:{op}")
+        if route == "/local/forward" and method == "POST":
+            payload = json.loads(body.decode("utf-8") or "{}") if body else {}
+            return self.forward(
+                str(payload.get("dest") or ""),
+                dict(payload.get("payload") or {}),
+                via=payload.get("via"),
+                hop_max=int(payload.get("hop_max") or HOP_MAX_DEFAULT),
+            )
         if route == "/local/ingress" and method == "POST":
             return self.ingress(body)
         if route == "/local/outbox/cut" and method == "POST":
@@ -474,7 +674,10 @@ def serve(node: Node, host: str = DEFAULT_BIND, port: int = DEFAULT_PORT) -> Thr
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(prog="qnm-node", description="QNM-BUILD-1.0 local node")
+    parser = argparse.ArgumentParser(
+        prog="qnm-node",
+        description="QNM-BUILD-1.0 local node + AIH-WP-1.3 spiderweb pair-bind",
+    )
     parser.add_argument("cmd", nargs="?", default="state", help="boot|state|serve|doctor|score")
     parser.add_argument("--root", default=".", help="install root directory")
     parser.add_argument("--port", type=int, default=DEFAULT_PORT)
@@ -503,8 +706,13 @@ def main(argv: list[str] | None = None) -> int:
                 "author": AUTHOR,
                 "spec": SPEC,
                 "companion": COMPANION,
+                "hub_law": HUB_LAW,
+                "pair_bind": PAIR_SPEC,
                 "radios": "off",
                 "bind": DEFAULT_BIND,
+                "hop_max": HOP_MAX_DEFAULT,
+                "bell_pair": False,
+                "qubit": False,
                 "forbidden_live_symbols": ["Lumen", "Mandible", "lattice_online", "mesh_complete"],
             }
             print(json.dumps(report, indent=2, sort_keys=True))

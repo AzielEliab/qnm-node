@@ -13,6 +13,8 @@ def test_no_live_completeness_assignments() -> None:
         'state = "mesh_complete"',
         'STATE = "Lumen"',
         'STATE = "Mandible"',
+        "bell_pair = True",
+        "qubit = True",
     )
     for path in (ROOT / "qnm").glob("*.py"):
         text = path.read_text(encoding="utf-8")
