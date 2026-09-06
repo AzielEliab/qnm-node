@@ -1,6 +1,8 @@
 {
   "spec": "QNM-BUILD-1.0",
-  "companion": "AIH-WP-1.1",
+  "companion": "AIH-WP-1.3",
+  "hub_law": "AIH-WP-1.1",
+  "pair_bind": "AIH-WP-1.3",
   "author": "Aziel Eliab",
   "identity": "Aziel Eliab",
   "bind": "127.0.0.1",
@@ -9,6 +11,9 @@
   "auto_heal": false,
   "live_from_site_ping": false,
   "anon_broadcast_publish": false,
+  "hop_max": 8,
+  "bell_pair": false,
+  "qubit": false,
   "bearers": {
     "local": true,
     "operator": false,

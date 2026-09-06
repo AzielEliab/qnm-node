@@ -16,7 +16,7 @@ python -m pytest -q
 
 Python 3.10+. Core is stdlib only. pytest is the dev extra. No network.
 
-## Ground rules (QNM-BUILD-1.0)
+## Ground rules (QNM-BUILD-1.0 + AIH-WP-1.3)
 
 1. **Identity is Aziel Eliab only.**
 2. Radios stay off. Local API binds 127.0.0.1 only.
@@ -29,7 +29,11 @@ Python 3.10+. Core is stdlib only. pytest is the dev extra. No network.
 9. AnonBroadcast is never a publish path.
 10. No Lumen / Mandible live symbols. No `lattice_online` / `mesh_complete`.
 11. Score never reads views.
-12. New behavior needs a §14 test that fails without the change.
+12. Pair-id is medium-independent (AIH-WP-1.3). Bearer is hop-only.
+    Isolation / PHOENIX-LOCK / Scorch / operator cut edges. Wi-Fi death
+    does not. Not Bell-pair physics. No qubit claims.
+13. New behavior needs a §14 (or AIH-WP-1.3) test that fails without
+    the change.
 
 ## License of contributions
 

@@ -1,10 +1,11 @@
 # QNM-BUILD-1.0 — Quantum Node Mesh Build Guide
 
 **Author:** Aziel Eliab only
-**Companion:** AIH-WP-1.1 (AZHub / AZInterface law; this repo is the local node)
+**Companion:** AIH-WP-1.3 (Spiderweb Pair-Bind; medium-independent)
+**Hub / Interface law:** AIH-WP-1.1 (AZHub / AZInterface remain separate)
 **License:** Apache-2.0
 **Date:** September 2026
-**Software:** qnm-node 1.0.0
+**Software:** qnm-node 1.1.0
 
 This document is the law for the local node process. Public identity is
 **Aziel Eliab** only.
@@ -31,11 +32,12 @@ Aziel Eliab only. No other author name. No account object. A node is an
 ## §3 Tree
 
 ```
-qnm/{boot,node,chain,apg,bearers,outbox,phoenix,score,memorial,tethers}.py
+qnm/{boot,node,chain,apg,bearers,outbox,phoenix,score,memorial,tethers,pairs,spiderweb}.py
 modules/anon-broadcast/          loopback-only
 cfg/node.json
 data/{chain,locks,outbox,receipts,witness}
-tests/                           §14
+docs/{QNM-BUILD-1.0,AIH-WP-1.3}.md
+tests/                           §14 + AIH-WP-1.3
 ```
 
 ## §4 Boot
@@ -57,6 +59,7 @@ Forward-only. **No auto-heal.** **No LIVE from site ping.** Local API
 binds **127.0.0.1** only:
 
 `/local/boot` `/local/state` `/local/bearer` `/local/tether`
+`/local/pair` `/local/pairs` `/local/forward`
 `/local/ingress` `/local/outbox` `/local/outbox/cut`
 `/local/phoenix/arm` `/local/receipts`
 
@@ -82,7 +85,9 @@ Visible local queue. Cut drops the item. `publish` is refused.
 ## §10 Tethers
 
 Declared corridors only (AIH-WP-1.1). Cut leaves no residue and does
-not auto-rewire. Stored under `data/witness/`.
+not auto-rewire. Stored under `data/witness/`. Pair-bind edges are
+**AIH-WP-1.3** (medium-independent spiderweb) — not these tethers.
+See [AIH-WP-1.3.md](AIH-WP-1.3.md).
 
 ## §11 PHOENIX-LOCK
 
@@ -110,11 +115,16 @@ clears tethers and outbox. `account_resurrect` / `account_restore` /
 | `tests/test_phoenix.py` | PHOENIX-LOCK waits locally; no controller hunt |
 | `tests/test_tether.py` | Tethers drop clean |
 | `tests/test_no_account.py` | No account resurrection; identity Aziel Eliab; score ignores views; anon-broadcast never publishes |
+| `tests/test_spiderweb.py` | AIH-WP-1.3: pair survives bearer off; forward along spiderweb with APG; isolated node has no edges; hop_max / loop drop |
 
 ## Cite
 
 Eliab, Aziel. (2026). QNM-BUILD-1.0 Quantum Node Mesh local node
 [Software]. Apache-2.0. https://github.com/AzielEliab/qnm-node
+
+Eliab, Aziel. (2026). AIH-WP-1.3 Spiderweb Pair-Bind [Law].
+Companion: QNM-BUILD-1.0. Apache-2.0.
+https://github.com/AzielEliab/qnm-node
 
 Do not invent a DOI.
 
