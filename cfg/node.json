@@ -1,0 +1,26 @@
+{
+  "spec": "QNM-BUILD-1.0",
+  "companion": "AIH-WP-1.1",
+  "author": "Aziel Eliab",
+  "identity": "Aziel Eliab",
+  "bind": "127.0.0.1",
+  "port": 8891,
+  "radios": "off",
+  "auto_heal": false,
+  "live_from_site_ping": false,
+  "anon_broadcast_publish": false,
+  "bearers": {
+    "local": true,
+    "operator": false,
+    "lan": false,
+    "radio": false,
+    "remote": false
+  },
+  "forbidden_live_symbols": [
+    "Lumen",
+    "Mandible",
+    "lattice_online",
+    "mesh_complete"
+  ],
+  "score_reads_views": false
+}

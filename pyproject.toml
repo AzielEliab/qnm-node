@@ -1,0 +1,51 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "qnm-node"
+version = "1.0.0"
+description = "QNM-BUILD-1.0 Quantum Node Mesh local node (APG, default-off bearers, PHOENIX-LOCK, QNM-S). Author: Aziel Eliab."
+readme = "README.md"
+license = {file = "LICENSE"}
+authors = [{name = "Aziel Eliab"}]
+requires-python = ">=3.10"
+keywords = [
+  "qnm",
+  "quantum-node-mesh",
+  "qnm-build",
+  "apg",
+  "phoenix-lock",
+  "receipts",
+  "local-first",
+]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "License :: OSI Approved :: Apache Software License",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Topic :: Security :: Cryptography",
+  "Intended Audience :: Developers",
+]
+dependencies = []
+
+[project.optional-dependencies]
+dev = ["pytest>=7.4"]
+
+[project.scripts]
+qnm-node = "qnm.node:main"
+
+[project.urls]
+Homepage = "https://github.com/AzielEliab/qnm-node"
+Issues = "https://github.com/AzielEliab/qnm-node/issues"
+
+[tool.setuptools.packages.find]
+include = ["qnm*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = "-q"
