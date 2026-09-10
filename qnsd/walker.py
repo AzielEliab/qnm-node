@@ -54,7 +54,12 @@ class ViaStack:
         body = photon.to_dict() if isinstance(photon, Photon) else dict(photon)
         photon_id = str(body.get("photon_id") or "")
         hop = int(body.get("hop") or 0)
-        hop_max = int(body.get("hop_max") or pol.hop_max or HOP_MAX_DEFAULT)
+        if "hop_max" in body and body["hop_max"] is not None:
+            hop_max = int(body["hop_max"])
+        elif pol.hop_max is not None:
+            hop_max = int(pol.hop_max)
+        else:
+            hop_max = HOP_MAX_DEFAULT
         seen = list(body.get("seen") or [])
 
         if not pairs_living:

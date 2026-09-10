@@ -20,7 +20,7 @@ from qnsd.vias import VIA_ORDER
 
 __version__ = "1.2.0"
 __author__ = AUTHOR
-__spec__ = SPEC
+__design__ = SPEC
 __parents__ = (
     "QNS-WP-1.3",
     "QNM-BUILD-1.0",
@@ -43,7 +43,7 @@ __all__ = [
     "loads",
     "photon_id",
     "__author__",
+    "__design__",
     "__parents__",
-    "__spec__",
     "__version__",
 ]
