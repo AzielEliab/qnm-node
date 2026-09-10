@@ -16,7 +16,12 @@ def test_no_live_completeness_assignments() -> None:
         "bell_pair = True",
         "qubit = True",
     )
-    for path in (ROOT / "qnm").glob("*.py"):
+    roots = [ROOT / "qnm", ROOT / "qnsd"]
+    files = []
+    for root in roots:
+        if root.is_dir():
+            files.extend(root.rglob("*.py"))
+    for path in files:
         text = path.read_text(encoding="utf-8")
         for token in banned_assigns:
-            assert token not in text, f"{path.name} assigns {token}"
+            assert token not in text, f"{path} assigns {token}"

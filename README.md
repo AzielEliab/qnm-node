@@ -2,12 +2,14 @@
 
 Local **Quantum Node Mesh** process from **[QNM-BUILD-1.0](docs/QNM-BUILD-1.0.md)**
 with **[AIH-WP-1.3](docs/AIH-WP-1.3.md)** Spiderweb Pair-Bind
-(medium-independent). Hub / Interface law remains **AIH-WP-1.1**.
+(medium-independent) and **[QNS-CD-1.0](docs/QNS-CD-1.0.md)** local
+`qnsd` (photon packet; vias in one program). Hub / Interface law
+remains **AIH-WP-1.1**.
 
 **Author:** Aziel Eliab only
-**Date:** September 2026 · v1.1.0
+**Date:** September 2026 · v1.2.0
 **License:** [Apache-2.0](LICENSE)
-**Spec:** QNM-BUILD-1.0 · AIH-WP-1.3
+**Spec:** QNM-BUILD-1.0 · AIH-WP-1.3 · QNS-CD-1.0
 
 > Radios off. Receipts to disk. Poison refused, not interpreted.
 > Pair-id outlives the path. Waiting is not death.
@@ -16,13 +18,17 @@ with **[AIH-WP-1.3](docs/AIH-WP-1.3.md)** Spiderweb Pair-Bind
 
 This is a **local node**. It is not AZHub, not AZInterface, not the
 hosted suite mesh, and not AnonBroadcast as a Softwares-tab product.
+Local **qnsd owns vias**. Suite Workers **cite / proxy only**.
+`GET /v1/mesh` **never enables**. There is **no Node Gate**.
 
 ## Honest scope
 
 **THIS IS:** a 127.0.0.1 process with APG on every ingress, default-off
 bearers, a visible outbox, declared tethers, PHOENIX-LOCK (local wait),
-QNM-S (score never reads views), and medium-independent pair-ids that
-forward only along existing spiderweb edges.
+QNM-S (score never reads views), medium-independent pair-ids that
+forward only along existing spiderweb edges, and a sibling `qnsd`
+process where the photon is the packet and restriction walks the next
+via class in one program.
 
 **THIS IS NOT:** a VPN, a radio mesh, Lumen, Mandible, `lattice_online`,
 `mesh_complete`, an account system, a publish path, Bell-pair physics,
@@ -83,6 +89,8 @@ python -m venv .venv && source .venv/bin/activate && pip install -e ".[dev]"
 python -m qnm doctor
 python -m qnm boot
 python -m qnm serve
+python -m qnsd doctor
+python -m qnsd serve
 ```
 
 Local API binds **127.0.0.1:8891** only:
@@ -102,21 +110,42 @@ Local API binds **127.0.0.1:8891** only:
 | `POST /local/phoenix/arm` | Wait locally |
 | `GET /local/receipts` | Disk receipts |
 
+`qnsd` adds `POST /local/policy` and `POST /local/declare` on the same
+loopback bind (port from `cfg/node.json`, default 8891).
+
+## QNS-CD-1.0 (local qnsd)
+
+Photon is the packet (`QNS1` ver 1.3). QNS is the native medium. Light
+is camera-flash OCC. `VIA_ORDER` = lan, plc, bt, rf, light, qns,
+operator, local. `local` + `qns` + `operator` are always PRESENT
+(software). rf / plc / light need declare. Restriction walks the next
+class automatically. `force_via` waits — no silent remap. Packet id
+does not change across hops. Sticky-via is banned. SEAL does not
+require OS BT / Wi-Fi.
+
+Device hooks for Bluetooth, RF, and camera may be **mock-backed** and
+still implement `ViaAdapter`. See [docs/QNS-CD-1.0.md](docs/QNS-CD-1.0.md)
+(PDF companion noted there; Worker does not serve it).
+
 ## Layout
 
 ```
 qnm/                 boot, node, chain, apg, bearers, outbox,
                      phoenix, score, memorial, tethers,
                      pairs, spiderweb
-modules/anon-broadcast/   loopback-only style tool
+qnsd/                QNS-CD-1.0 daemon: photon, walker, vias, light,
+                     azpipe, policy, api (127.0.0.1)
+modules/anon-broadcast/   loopback-only style tool (never a publish path)
 cfg/node.json
 data/{chain,locks,outbox,receipts,witness}
 docs/QNM-BUILD-1.0.md
 docs/AIH-WP-1.3.md
-tests/               §14 + AIH-WP-1.3
+docs/QNS-CD-1.0.md   (+ PDF companion note)
+docs/DESIGN-INDEX.md
+tests/               QNM §14 + AIH-WP-1.3 + QNS-CD-1.0 §14
 ```
 
-## Tests (§14 + AIH-WP-1.3)
+## Tests (§14 + AIH-WP-1.3 + QNS-CD-1.0)
 
 ```bash
 pip install -e ".[dev]"
@@ -126,7 +155,9 @@ python -m pytest -q
 Offline. Covers radios-off / two roots / lock resume, APG poison,
 tamper isolate, PHOENIX-LOCK local wait, clean tether cut, no
 account resurrection, pair survives bearer off, spiderweb forward
-with APG, isolated node has no edges, and hop_max / loop drop.
+with APG, isolated node has no edges, hop_max / loop drop, and QNS-CD
+via Protocol / walker / light OCC / lock-backed outbox wait / pair-cut
+emit stop.
 
 ## Cite
 
@@ -137,8 +168,14 @@ Eliab, Aziel. (2026). AIH-WP-1.3 Spiderweb Pair-Bind [Law].
 Companion: QNM-BUILD-1.0. Apache-2.0.
 https://github.com/AzielEliab/qnm-node
 
+Eliab, Aziel. (2026). QNS-CD-1.0 Quantum Node Signal Coding Design
+[Software]. Apache-2.0. https://github.com/AzielEliab/qnm-node
+
 Do not invent a DOI.
 
-See [docs/QNM-BUILD-1.0.md](docs/QNM-BUILD-1.0.md) and
-[docs/AIH-WP-1.3.md](docs/AIH-WP-1.3.md). AZHub / AZInterface remain
-separate software (AIH-WP-1.1).
+See [docs/QNM-BUILD-1.0.md](docs/QNM-BUILD-1.0.md),
+[docs/AIH-WP-1.3.md](docs/AIH-WP-1.3.md),
+[docs/QNS-CD-1.0.md](docs/QNS-CD-1.0.md), and
+[docs/DESIGN-INDEX.md](docs/DESIGN-INDEX.md). AZHub / AZInterface remain
+separate software (AIH-WP-1.1). Suite Workers cite/proxy only. GET /v1/mesh
+never enables. No Node Gate.

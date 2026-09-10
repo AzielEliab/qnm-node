@@ -27,5 +27,23 @@
     "lattice_online",
     "mesh_complete"
   ],
-  "score_reads_views": false
+  "score_reads_views": false,
+  "qnsd_spec": "QNS-CD-1.0",
+  "qns_wp": "QNS-WP-1.3",
+  "sticky_via": false,
+  "softwares_tab": false,
+  "node_gate": false,
+  "mesh_enable": false,
+  "via_order": [
+    "lan",
+    "plc",
+    "bt",
+    "rf",
+    "light",
+    "qns",
+    "operator",
+    "local"
+  ],
+  "always_present": ["local", "qns", "operator"],
+  "declare_required": ["rf", "plc", "light"]
 }
