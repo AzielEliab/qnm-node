@@ -16,7 +16,7 @@ python -m pytest -q
 
 Python 3.10+. Core is stdlib only. pytest is the dev extra. No network.
 
-## Ground rules (QNM-BUILD-1.0 + AIH-WP-1.3)
+## Ground rules (QNM-BUILD-1.0 + AIH-WP-1.3 + QNS-CD-1.0)
 
 1. **Identity is Aziel Eliab only.**
 2. Radios stay off. Local API binds 127.0.0.1 only.
@@ -32,8 +32,10 @@ Python 3.10+. Core is stdlib only. pytest is the dev extra. No network.
 12. Pair-id is medium-independent (AIH-WP-1.3). Bearer is hop-only.
     Isolation / PHOENIX-LOCK / Scorch / operator cut edges. Wi-Fi death
     does not. Not Bell-pair physics. No qubit claims.
-13. New behavior needs a §14 (or AIH-WP-1.3) test that fails without
-    the change.
+13. New behavior needs a §14 (or AIH-WP-1.3 / QNS-CD-1.0) test that
+    fails without the change.
+14. Local `qnsd` owns vias. Sticky-via banned. API 127.0.0.1 only.
+    Photon id does not change across hops. Anon-broadcast never publishes.
 
 ## License of contributions
 
