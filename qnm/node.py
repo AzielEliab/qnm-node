@@ -5,10 +5,11 @@ State: COLD → LOCAL → LIVE (operator bearer) → DEGRADED → ISOLATED
 
 No auto-heal. No LIVE from site ping. PHOENIX-LOCK waits / re-seals
 locally after poison or isolation — it does not restore a public
-hostname. Public tunnels and sites die with the pull. Local API binds
-127.0.0.1 only. Receipts go to disk. Radios stay off. Pair-id is
-medium-independent (AIH-WP-1.3). Isolation cuts pair edges. Not
-Bell-pair physics.
+hostname. Public tunnels and sites die with the pull. Split the wires:
+tick plane is presence + tip hash only; payload plane is pull-only.
+Cold copies remain after a public pull. Local API binds 127.0.0.1 only.
+Receipts go to disk. Radios stay off. Pair-id is medium-independent
+(AIH-WP-1.3). Isolation cuts pair edges. Not Bell-pair physics.
 """
 
 from __future__ import annotations
@@ -36,8 +37,11 @@ from qnm.boot import (
     lock_path,
     mark_scorched,
     resume,
+    sha256_hex,
 )
+from qnm.archive import ChainArchive
 from qnm.chain import Chain
+from qnm.coldcopy import ColdCopy
 from qnm.memorial import Memorial
 from qnm.outbox import Outbox
 from qnm.pairs import HOP_MAX_DEFAULT, Pairs
@@ -45,6 +49,7 @@ from qnm.phoenix import Phoenix
 from qnm.score import score_local
 from qnm.spiderweb import Spiderweb
 from qnm.tethers import Tethers
+from qnm.wires import DWELL_S, Lockset, Wires
 
 STATES = (
     "COLD",
@@ -82,11 +87,21 @@ LOCAL_PATHS = {
     "/local/outbox/cut",
     "/local/phoenix/arm",
     "/local/receipts",
+    "/local/tick",
+    "/local/pull",
+    "/local/cite",
+    "/local/emit",
+    "/local/rejoin",
+    "/local/vault",
+    "/local/wires",
+    "/local/archive",
+    "/local/reheal",
+    "/local/survive",
 }
 
 
 def ensure_data_dirs(root: Path) -> None:
-    for name in ("chain", "locks", "outbox", "receipts", "witness"):
+    for name in ("chain", "locks", "outbox", "receipts", "witness", "vault", "archive"):
         (Path(root) / "data" / name).mkdir(parents=True, exist_ok=True)
 
 
@@ -104,6 +119,15 @@ def load_cfg(root: Path) -> dict[str, Any]:
             "auto_heal": False,
             "live_from_site_ping": False,
             "anon_broadcast_publish": False,
+            "live_body_sync": False,
+            "auto_splice": False,
+            "named_hosts_only": True,
+            "unmarked_hydra": False,
+            "vpn_concealment": False,
+            "cold_copy_n": 3,
+            "dwell_s": DWELL_S,
+            "public_network_required": False,
+            "tips_need_live_data": False,
         }
     return json.loads(path.read_text(encoding="utf-8"))
 
@@ -124,6 +148,9 @@ class Node:
         self.outbox = Outbox(self.root)
         self.tethers = Tethers(self.root)
         self.phoenix = Phoenix()
+        self.wires = Wires(self.root)
+        self.vault = ColdCopy(self.root, replica_n=int(self.cfg.get("cold_copy_n") or 3))
+        self.archive = ChainArchive(self.root)
         self.memorial = Memorial(self.root)
         self.pairs = Pairs(self.memorial)
         self.spiderweb: Spiderweb | None = None
@@ -191,6 +218,15 @@ class Node:
             "auto_heal": False,
             "live_from_site_ping": False,
             "phoenix": self.phoenix.status(),
+            "wires": self.wires.status(),
+            "vault": self.vault.status(),
+            "live_body_sync": False,
+            "auto_splice": False,
+            "heal_from_neighbor": False,
+            "majority_reheal": False,
+            "public_network_required": False,
+            "tips_need_live_data": False,
+            "cross_network_survival": True,
             "tethers": self.tethers.list(),
             "pairs": self.pairs.list(),
             "hop_max": HOP_MAX_DEFAULT,
@@ -226,7 +262,12 @@ class Node:
         self.install_root = str(record["install_root"])
         if self.state == "COLD":
             self._advance("LOCAL")
+        sidecar = self.root / "data" / "witness" / "reexpand.json"
+        if sidecar.is_file():
+            self._seat_verified_tip(append_boot=False)
+            return self.snapshot()
         self._write_receipt("boot", {"install_root": self.install_root, "state": self.state})
+        self._seat_verified_tip(append_boot=True)
         return self.snapshot()
 
     def set_bearer(self, name: str, on: bool) -> dict[str, Any]:
@@ -263,6 +304,51 @@ class Node:
     def heal(self) -> None:
         raise QNMRefuse("QNM-NO-AUTO-HEAL", "no auto-heal")
 
+    def require_public_network(self) -> None:
+        raise QNMRefuse(
+            "QNM-SURVIVE-OFFLINE",
+            "mesh does not need the public network to preserve tips",
+        )
+
+    def require_live_data(self) -> None:
+        raise QNMRefuse(
+            "QNM-SURVIVE-OFFLINE",
+            "chain survives via cold copies / archive re-expand / self-reheal",
+        )
+
+    def survive_network_death(self) -> dict[str, Any]:
+        """Public network + live data gone. Local verify/append must still work."""
+        self._require_not_scorched()
+        pulled = self.vault.pull_origin()
+        verified = self.chain.verify()
+        if not verified["ok"]:
+            raise QNMRefuse("QNM-WIRES-FAIL-CLOSED", "offline chain must still verify")
+        self._write_receipt(
+            "survive_offline",
+            {
+                "die_with_pull": True,
+                "public_network": False,
+                "live_data": False,
+                "tip": verified["tip"],
+            },
+        )
+        self._seat_verified_tip(append_boot=True)
+        again = self.chain.verify()
+        packed = self.archive.pack()
+        return {
+            "ok": True,
+            "die_with_pull": True,
+            "origin_alive": pulled["origin_alive"],
+            "verify_ok": again["ok"],
+            "appended": True,
+            "tip": again["tip"],
+            "archive": packed["digest"],
+            "last_good_tip": self.phoenix.last_good_tip,
+            "public_network_required": False,
+            "spec": "CROSS-NETWORK-SURVIVAL-1.0",
+            "author": AUTHOR,
+        }
+
     def degrade(self, reason: str = "fault") -> dict[str, Any]:
         self._require_not_scorched()
         if self.state in ("LOCAL", "LIVE"):
@@ -280,9 +366,15 @@ class Node:
             self._advance("ISOLATED")
         self.bearers.drop_all_except_local()
         cut = self.pairs.cut_all()
+        dropped = self.tethers.drop_all()
         self._write_receipt(
             "tamper_isolate",
-            {"reason": reason, "state": self.state, "pairs_cut": cut["cut_count"]},
+            {
+                "reason": reason,
+                "state": self.state,
+                "pairs_cut": cut["cut_count"],
+                "tethers_cut": dropped["cut_count"],
+            },
         )
         return self.snapshot()
 
@@ -512,6 +604,28 @@ class Node:
                 via=payload.get("via"),
                 hop_max=int(payload.get("hop_max") or HOP_MAX_DEFAULT),
             )
+        if op == "tick":
+            return self.admit_tick(payload)
+        if op == "pull":
+            return self.pull_payload(str(payload.get("tip") or payload.get("tip_hash") or ""))
+        if op == "cite":
+            return self.cite_tip(payload)
+        if op == "emit":
+            return self.emit_tip()
+        if op == "rejoin":
+            return self.rejoin_island(payload)
+        if op == "vault":
+            return self.vault_act(payload)
+        if op in ("live_sync", "push", "unsend", "splice"):
+            return self._refuse_wire_op(op)
+        if op == "reheal":
+            return self.reheal(payload)
+        if op == "chatter":
+            return self.chatter(payload)
+        if op == "archive":
+            return self.archive_act(payload)
+        if op in ("need_network", "require_public_network", "require_live_data"):
+            self.require_public_network() if op != "require_live_data" else self.require_live_data()
         self._write_receipt("ingress", {"op": op})
         return {"ok": True, "admitted": True, "op": op, "state": self.state}
 
@@ -525,6 +639,236 @@ class Node:
             scorched=self.state == "SCORCHED",
             extra=extra,
         )
+
+    def admit_tick(self, payload: dict[str, Any] | bytes) -> dict[str, Any]:
+        self._require_not_scorched()
+        admitted = self.wires.admit_tick(payload)
+        self._write_receipt("tick", {"plane": "tick", "tip_hash": admitted.get("tip_hash")})
+        admitted["ok"] = True
+        admitted["state"] = self.state
+        return admitted
+
+    def pull_payload(self, digest: str) -> dict[str, Any]:
+        self._require_not_scorched()
+        pulled = self.wires.pull_payload(digest)
+        verified = self.vault.verify(digest, creator_online=False)
+        pulled["vault"] = verified
+        self._write_receipt("pull", {"tip": digest, "plane": "payload"})
+        return pulled
+
+    def cite_tip(self, payload: dict[str, Any]) -> dict[str, Any]:
+        self._require_not_scorched()
+        lock_items = payload.get("lockset")
+        lockset = Lockset.from_iterable(lock_items) if lock_items is not None else None
+        cited = self.wires.cite(
+            prev=str(payload.get("prev") or self.wires.held_prev),
+            tip=str(payload.get("tip") or payload.get("tip_hash") or ""),
+            peer=str(payload.get("peer") or "local"),
+            lockset=lockset,
+            now=payload.get("now"),
+            authorize_by_clock=bool(payload.get("authorize_by_clock")),
+        )
+        self._write_receipt("cite", {"prev": cited["prev"], "tip": cited["tip"]})
+        return cited
+
+    def apply_cite(self, payload: dict[str, Any] | None = None) -> dict[str, Any]:
+        self._require_not_scorched()
+        body = payload or {}
+        out = self.wires.apply_cited(now=body.get("now"), arrived_tip=body.get("arrived_tip"))
+        if out.get("applied"):
+            self._write_receipt("cite_applied", {"tip": out.get("tip")})
+        return out
+
+    def emit_tip(self) -> dict[str, Any]:
+        self._require_not_scorched()
+        verified = self.chain.verify()
+        self.wires.mark_verified(bool(verified["ok"]))
+        rec = self.wires.emit_tick(self.install_root or "local", verified["tip"])
+        self._write_receipt("emit_tick", {"tip": rec["tip_hash"], "verified": True})
+        return rec
+
+    def rejoin_island(self, payload: dict[str, Any]) -> dict[str, Any]:
+        self._require_not_scorched()
+        lock_items = payload.get("lockset")
+        lockset = Lockset.from_iterable(lock_items) if lock_items is not None else None
+        out = self.wires.rejoin(
+            prev=str(payload.get("prev") or self.wires.held_prev),
+            tip=str(payload.get("tip") or ""),
+            operator=bool(payload.get("operator")),
+            lockset=lockset,
+            now=payload.get("now"),
+            peer=str(payload.get("peer") or "rejoin"),
+        )
+        self._write_receipt("rejoin", {"tip": out.get("tip"), "operator": bool(payload.get("operator"))})
+        return out
+
+    def vault_act(self, payload: dict[str, Any]) -> dict[str, Any]:
+        self._require_not_scorched()
+        op = str(payload.get("action") or payload.get("op") or "store")
+        if op in ("live_sync", "sync"):
+            self.vault.live_sync()
+        if op == "hydra":
+            self.vault.unmarked_hydra()
+        if op == "vpn":
+            self.vault.vpn_conceal()
+        if op == "pull_origin":
+            out = self.vault.pull_origin()
+            self._write_receipt("vault_pull_origin", {"die_with_pull": True, "cold_copies_remain": True})
+            return out
+        if op == "pin":
+            out = self.vault.pin_public(
+                str(payload.get("tip") or payload.get("hash") or ""),
+                kind=str(payload.get("kind") or "tip"),
+            )
+            self._write_receipt("vault_pin", {"tip": out["tip"]})
+            return out
+        if op == "transfer":
+            out = self.vault.transfer(
+                str(payload.get("tip") or ""),
+                host=str(payload.get("host") or "mesh-vault"),
+            )
+            self._write_receipt("vault_transfer", {"tip": out["tip"], "host": out["host"]})
+            return out
+        if op == "verify":
+            return self.vault.verify(
+                str(payload.get("tip") or ""),
+                creator_online=bool(payload.get("creator_online")),
+                require_creator=bool(payload.get("require_creator")),
+            )
+        body = payload.get("body")
+        if body is None:
+            raise QNMRefuse("QNM-COLD-MISSING", "vault store needs a body")
+        raw = body if isinstance(body, (bytes, bytearray)) else str(body)
+        out = self.vault.store(raw, host=str(payload.get("host") or "local"))
+        self.wires.store_for_pull(
+            raw.encode("utf-8") if isinstance(raw, str) else bytes(raw),
+            digest=out["tip"],
+        )
+        if payload.get("transfer"):
+            out["mesh_vault"] = self.vault.transfer(out["tip"], host=str(payload.get("vault_host") or "mesh-vault"))
+        if payload.get("reader"):
+            out["reader"] = self.vault.transfer(out["tip"], host=str(payload.get("reader") or "reader"))
+        self._write_receipt("vault_store", {"tip": out["tip"]})
+        return out
+
+    def _seat_verified_tip(self, *, append_boot: bool) -> None:
+        _ = append_boot
+        verified = self.chain.verify()
+        self.wires.held_prev = self.chain.tip
+        self.wires.lockset = self.wires.lockset.with_hash(self.chain.tip)
+        self.wires.mark_verified(bool(verified["ok"]))
+        if verified["ok"] and self.chain.path.is_file():
+            raw = self.chain.path.read_bytes()
+            digest = sha256_hex(raw)
+            self.phoenix.remember_good(self.chain.tip, digest)
+            if digest not in {row.get("tip") for row in self.vault.replicas()}:
+                stored = self.vault.store(raw, host="local")
+                self.wires.store_for_pull(raw, digest=stored["tip"])
+                self.wires.lockset = self.wires.lockset.with_hash(stored["tip"])
+
+    def chatter(self, message: dict[str, Any]) -> dict[str, Any]:
+        return self.phoenix.admit_chatter(message)
+
+    def reheal(self, payload: dict[str, Any] | None = None) -> dict[str, Any]:
+        """Heal from own last good tip + trusted pull, or phoenix-WAIT."""
+        self._require_not_scorched()
+        body = dict(payload or {})
+        if body.get("neighbor") or body.get("listen") or body.get("should_be") or body.get("advice"):
+            self.phoenix.neighbor_heal()
+        if body.get("vote") or body.get("majority") or body.get("vote_to_fix"):
+            self.phoenix.vote_to_fix()
+        if body.get("status"):
+            self.chatter(body)
+        last_tip = self.phoenix.last_good_tip
+        last_bytes = self.phoenix.last_good_bytes
+        if not last_tip or not last_bytes:
+            return self.arm_phoenix()
+        if not self.wires.lockset.holds(last_bytes) and not self.wires.lockset.holds(last_tip):
+            return self.arm_phoenix()
+        try:
+            trusted = self.vault.verify(last_bytes, creator_online=False)
+            raw = (self.vault.objects / trusted["tip"]).read_bytes()
+            if sha256_hex(raw) != last_bytes:
+                raise QNMRefuse("QNM-WIRES-FAIL-CLOSED", "trusted bytes mismatch")
+            self.chain.path.write_bytes(raw)
+            self.chain._load()
+            verified = self.chain.verify()
+            if not verified["ok"] or verified["tip"] != last_tip:
+                raise QNMRefuse("QNM-WIRES-FAIL-CLOSED", "reheal did not land on last good tip")
+        except QNMRefuse:
+            return self.arm_phoenix()
+        dropped = self.tethers.drop_all()
+        self._write_receipt(
+            "reheal",
+            {
+                "from": "own-last-good",
+                "tip": last_tip,
+                "neighbor": False,
+                "majority": False,
+                "tethers_cut": dropped["cut_count"],
+            },
+        )
+        snap = self.snapshot()
+        snap["reheal"] = {
+            "ok": True,
+            "healed": True,
+            "from": "own-last-good",
+            "tip": last_tip,
+            "neighbor": False,
+            "majority": False,
+            "phoenix": self.state == "PHOENIX_LOCK",
+        }
+        return snap
+
+    def pack_archive(self) -> dict[str, Any]:
+        self._require_not_scorched()
+        packed = self.archive.pack()
+        self._write_receipt("archive_pack", {"digest": packed["digest"], "tip": packed["tip"]})
+        return packed
+
+    def verify_archive(self, path: str | Path) -> dict[str, Any]:
+        return self.archive.verify(Path(path))
+
+    def reexpand_from(self, payload: dict[str, Any]) -> dict[str, Any]:
+        dest = Path(str(payload.get("dest") or (self.root / "data" / "archive" / "reexpand")))
+        out = self.archive.reexpand(
+            Path(str(payload.get("path") or "")),
+            dest,
+            actor=str(payload.get("actor") or "operator"),
+            from_index=bool(payload.get("from_index") or payload.get("index")),
+            entropy=bytes.fromhex(payload["entropy"]) if payload.get("entropy") else None,
+            nonce=bytes.fromhex(payload["nonce"]) if payload.get("nonce") else None,
+        )
+        seated = Node(dest)
+        seated.boot()
+        out["state"] = seated.state
+        out["install_root"] = seated.install_root
+        out["tip"] = seated.chain.tip
+        out["pairs"] = len(seated.pairs.list())
+        return out
+
+    def archive_act(self, payload: dict[str, Any]) -> dict[str, Any]:
+        op = str(payload.get("op") or payload.get("action") or "pack")
+        if op == "weights":
+            self.archive.refuse_weights()
+        if op == "pack":
+            return self.pack_archive()
+        if op == "verify":
+            return self.verify_archive(str(payload.get("path") or ""))
+        if op == "reexpand":
+            return self.reexpand_from(payload)
+        raise QNMRefuse("QNM-ARCHIVE-BYTES", f"unknown archive op:{op}")
+
+    def _refuse_wire_op(self, op: str) -> None:
+        if op == "live_sync":
+            self.vault.live_sync()
+        if op == "push":
+            self.wires.push_payload()
+        if op == "unsend":
+            self.wires.unsend()
+        if op == "splice":
+            self.wires.splice()
+        raise QNMRefuse("QNM-WIRES-FAIL-CLOSED", op)
 
     def _require_not_scorched(self) -> None:
         if self.state == "SCORCHED":
@@ -631,6 +975,37 @@ class Node:
             return self.cut_outbox(str(payload.get("id") or ""))
         if route == "/local/phoenix/arm" and method == "POST":
             return self.arm_phoenix()
+        if route == "/local/wires" and method == "GET":
+            return self.wires.status()
+        if route == "/local/vault" and method == "GET":
+            return self.vault.status()
+        if route == "/local/tick" and method == "POST":
+            payload = json.loads(body.decode("utf-8") or "{}") if body else {}
+            return self.admit_tick(payload)
+        if route == "/local/pull" and method == "POST":
+            payload = json.loads(body.decode("utf-8") or "{}") if body else {}
+            return self.pull_payload(str(payload.get("tip") or payload.get("tip_hash") or ""))
+        if route == "/local/cite" and method == "POST":
+            payload = json.loads(body.decode("utf-8") or "{}") if body else {}
+            if payload.get("apply"):
+                return self.apply_cite(payload)
+            return self.cite_tip(payload)
+        if route == "/local/emit" and method == "POST":
+            return self.emit_tip()
+        if route == "/local/rejoin" and method == "POST":
+            payload = json.loads(body.decode("utf-8") or "{}") if body else {}
+            return self.rejoin_island(payload)
+        if route == "/local/vault" and method == "POST":
+            payload = json.loads(body.decode("utf-8") or "{}") if body else {}
+            return self.vault_act(payload)
+        if route == "/local/archive" and method == "POST":
+            payload = json.loads(body.decode("utf-8") or "{}") if body else {}
+            return self.archive_act(payload)
+        if route == "/local/reheal" and method == "POST":
+            payload = json.loads(body.decode("utf-8") or "{}") if body else {}
+            return self.reheal(payload)
+        if route == "/local/survive" and method == "POST":
+            return self.survive_network_death()
         raise QNMRefuse("QNM-LOOPBACK-ONLY", f"{method} {route}")
 
 

@@ -53,6 +53,13 @@ or a qubit machine.
 - No `lattice_online` / `mesh_complete`
 - Score **never reads views**
 - Identity **Aziel Eliab** only
+- **Split the wires:** tick = presence + tip hash; payloads are pull-only
+- **Cold copies** survive a public pull. No live body sync. Named hosts only
+- **Re-expand** = archive verify + new local node on tip (bytes, not summaries)
+- **Reheal** = own last good tip + trusted pull, or phoenix-WAIT. Not neighbors
+- **Cross-network survival:** if network + live data die, the chain still
+  survives. Local verify / append stay offline. Tips do not need the
+  public network
 
 ## Pair-bind law (AIH-WP-1.3)
 
@@ -115,6 +122,16 @@ Local API binds **127.0.0.1:8891** only:
 | `POST /local/outbox/cut` | Drop one item |
 | `POST /local/phoenix/arm` | Wait / re-seal locally (not public hostname restore) |
 | `GET /local/receipts` | Disk receipts |
+| `POST /local/tick` | Tick plane: presence + tip hash only |
+| `POST /local/pull` | Pull payload (never a push) |
+| `POST /local/cite` | Hash-absolute cite (prev + lockset) |
+| `POST /local/emit` | Announce tip after own verify |
+| `POST /local/rejoin` | Cite + operator / lockset (no auto-splice) |
+| `GET/POST /local/vault` | Cold replicas / pin / pull-origin |
+| `GET /local/wires` | Plane + clock status |
+| `POST /local/archive` | Pack / verify / re-expand chain bytes |
+| `POST /local/reheal` | Own last good tip, or phoenix-WAIT |
+| `POST /local/survive` | Public network dead; local verify / append / archive |
 
 `qnsd` adds `POST /local/policy` and `POST /local/declare` on the same
 loopback bind (port from `cfg/node.json`, default 8891).
@@ -138,12 +155,12 @@ still implement `ViaAdapter`. See [docs/QNS-CD-1.0.md](docs/QNS-CD-1.0.md)
 ```
 qnm/                 boot, node, chain, apg, bearers, outbox,
                      phoenix, score, memorial, tethers,
-                     pairs, spiderweb
+                     pairs, spiderweb, wires, coldcopy, archive
 qnsd/                QNS-CD-1.0 daemon: photon, walker, vias, light,
                      azpipe, policy, api (127.0.0.1)
 modules/anon-broadcast/   loopback-only style tool (never a publish path)
 cfg/node.json
-data/{chain,locks,outbox,receipts,witness}
+data/{chain,locks,outbox,receipts,witness,vault,archive}
 docs/QNM-BUILD-1.0.md
 docs/AIH-WP-1.3.md
 docs/QNS-CD-1.0.md   (+ PDF companion note)

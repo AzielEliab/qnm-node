@@ -66,3 +66,23 @@ def test_phoenix_forward_only(tmp_path: Path) -> None:
         node._advance("LIVE")
     assert exc.value.code == "QNM-NO-AUTO-HEAL"
     assert node.state == "PHOENIX_LOCK"
+
+
+def test_reheal_missing_trust_phoenix_waits(tmp_path: Path) -> None:
+    node = Node(tmp_path)
+    node.boot(entropy=b"e", nonce=b"n")
+    node.phoenix.last_good_tip = None
+    node.phoenix.last_good_bytes = None
+    snap = node.reheal()
+    assert snap["state"] == "PHOENIX_LOCK"
+    assert snap["phoenix"]["waiting"] == "local"
+    assert snap["phoenix"]["heal_from_neighbor"] is False
+
+
+def test_neighbor_phoenix_does_not_reheal(tmp_path: Path) -> None:
+    node = Node(tmp_path)
+    node.boot(entropy=b"e", nonce=b"n")
+    with pytest.raises(QNMRefuse) as exc:
+        node.wires.neighbor_phoenix("peer")
+    assert exc.value.code == "QNM-PHOENIX-LOCAL-WAIT"
+    assert node.state != "PHOENIX_LOCK"

@@ -29,16 +29,28 @@ Aziel Eliab only. No other author name. No account object. A node is an
 - No **Lumen** / **Mandible** live symbols.
 - No **lattice_online** / **mesh_complete**.
 - **Score never reads views**.
+- **Split the wires:** tick plane is presence + tip hash only (0.5–1s,
+  fixed-size). Payload plane is pull-only. 1s loop and 777s gate never
+  share a socket.
+- **Cold copies** survive a public pull. No live body sync. Named hosts
+  only; no unmarked hydra; no VPN concealment.
+- **Re-expand** is archive verify + a new local node on tip. Bytes, not
+  summaries. Crawlers do not re-expand. Weights are not the tarball.
+- **Reheal** is own last good tip + trusted pull, or phoenix-WAIT. Not
+  neighbor chatter. No majority fanfic.
+- **Cross-network survival:** if the public network and live data die,
+  the chain still survives. Local verify / append stay offline. The
+  mesh does not need the public network to preserve tips.
 
 ## §3 Tree
 
 ```
-qnm/{boot,node,chain,apg,bearers,outbox,phoenix,score,memorial,tethers,pairs,spiderweb}.py
+qnm/{boot,node,chain,apg,bearers,outbox,phoenix,score,memorial,tethers,pairs,spiderweb,wires,coldcopy,archive}.py
 modules/anon-broadcast/          loopback-only
 cfg/node.json
-data/{chain,locks,outbox,receipts,witness}
-docs/{QNM-BUILD-1.0,AIH-WP-1.3}.md
-tests/                           §14 + AIH-WP-1.3
+data/{chain,locks,outbox,receipts,witness,vault,archive}
+docs/{QNM-BUILD-1.0,AIH-WP-1.3,SPLIT-WIRES-1.0,COLD-COPY-1.0,RE-EXPAND-1.0,REHEAL-1.0,CROSS-NETWORK-SURVIVAL-1.0}.md
+tests/                           §14 + AIH-WP-1.3 + wires + cold-copy + archive + reheal + survival
 ```
 
 ## §4 Boot
@@ -65,6 +77,9 @@ the pull**. Local API binds **127.0.0.1** only:
 `/local/pair` `/local/pairs` `/local/forward`
 `/local/ingress` `/local/outbox` `/local/outbox/cut`
 `/local/phoenix/arm` `/local/receipts`
+`/local/tick` `/local/pull` `/local/cite` `/local/emit`
+`/local/rejoin` `/local/vault` `/local/wires`
+`/local/archive` `/local/reheal` `/local/survive`
 
 ## §6 Bearers
 
@@ -125,10 +140,60 @@ clears tethers and outbox. `account_resurrect` / `account_restore` /
 | `tests/test_offline.py` | Radios off; two roots; resume locks only; no LIVE from ping; no auto-heal; receipts on disk; 127.0.0.1 API |
 | `tests/test_apg.py` | Every ingress through APG; poison refused not interpreted |
 | `tests/test_tamper.py` | Tamper isolates; no auto-heal out of ISOLATED |
-| `tests/test_phoenix.py` | PHOENIX-LOCK waits / re-seals locally; no controller hunt; not public hostname restore |
-| `tests/test_tether.py` | Tethers drop clean |
+| `tests/test_phoenix.py` | PHOENIX-LOCK waits / re-seals locally; no controller hunt; not public hostname restore; reheal waits when trust is gone |
+| `tests/test_tether.py` | Tethers drop clean; isolate drops tethers; no neighbor rewire |
 | `tests/test_no_account.py` | No account resurrection; identity Aziel Eliab; score ignores views; anon-broadcast never publishes |
 | `tests/test_spiderweb.py` | AIH-WP-1.3: pair survives bearer off; forward along spiderweb with APG; isolated node has no edges; hop_max / loop drop |
+| `tests/test_wires.py` | SPLIT-WIRES-1.0: tick plane; pull-only payload; cite/dwell/equivocation/partition |
+| `tests/test_coldcopy.py` | COLD-COPY-1.0: N replicas survive pull; no live sync; named hosts only |
+| `tests/test_archive.py` | RE-EXPAND-1.0: chain bytes, not summaries; new node on tip; no crawler / index / weights |
+| `tests/test_reheal.py` | REHEAL-1.0: own last good + trusted pull; no neighbor / majority; chatter is status+tip-hash |
+| `tests/test_survival.py` | CROSS-NETWORK-SURVIVAL-1.0: offline verify/append after public death; refuse network-required |
+
+## §15 Split the wires
+
+Two planes. They never share a socket.
+
+Tick (0.5–1s): presence + tip hash only. Fixed-size. No body, no diff,
+no file. Payload: the receiver **pulls**. Update is a proof (cite prev +
+lockset, fail-closed). 777s is dwell after a valid cite — not a timer
+that accepts whatever arrived. Clock desync is not a yes. Ambiguous tip
+isolates. Equivocation locks that peer; the chain continues. Emit only
+after own verify. No unsend. No auto-splice. Heartbeat loss is not
+poison and is not apply-last-packet. See [SPLIT-WIRES-1.0](SPLIT-WIRES-1.0.md).
+
+## §16 Cold-copy survival
+
+N named cold replicas (MESH-VAULT on transfer, reader local vaults,
+optional pin of already-public tip/receipt hashes). Pulling origin /
+Worker / DNS **dies with the pull** and does not erase cold copies.
+Local verify / append continues. No live body sync. Named hosts only.
+No unmarked hydra. No VPN concealment. See
+[COLD-COPY-1.0](COLD-COPY-1.0.md).
+
+## §17 Re-expand from archive
+
+Bytes of the chain survive, not summaries. Re-expand verifies the
+tarball and seats a **new** local node on that tip. It is not mesh
+growing from an index. Crawlers do not re-expand. Weights are not the
+tarball. See [RE-EXPAND-1.0](RE-EXPAND-1.0.md).
+
+## §18 Reheal
+
+A poisoned node heals from its own last good tip plus a verified pull
+of bytes it already trusted — or it phoenix-WAITs. It does not heal by
+listening to neighbors. Allowed chatter: live / locked / isolated /
+tip-hash. Isolate drops tethers; other nodes keep their chain. No
+majority fanfic. See [REHEAL-1.0](REHEAL-1.0.md).
+
+## §19 Cross-network survival
+
+If the public network and live data die tomorrow, the chain still
+survives via cold copies, archive re-expand, and self-reheal. The local
+node keeps verifying and appending offline. The mesh does not need the
+public network to preserve tips. `require_public_network` and
+`require_live_data` refuse (`QNM-SURVIVE-OFFLINE`). See
+[CROSS-NETWORK-SURVIVAL-1.0](CROSS-NETWORK-SURVIVAL-1.0.md).
 
 ## Cite
 
@@ -137,6 +202,10 @@ Eliab, Aziel. (2026). QNM-BUILD-1.0 Quantum Node Mesh local node
 
 Eliab, Aziel. (2026). AIH-WP-1.3 Spiderweb Pair-Bind [Law].
 Companion: QNM-BUILD-1.0. Apache-2.0.
+https://github.com/AzielEliab/qnm-node
+
+Eliab, Aziel. (2026). SPLIT-WIRES-1.0 / COLD-COPY-1.0 / RE-EXPAND-1.0 /
+REHEAL-1.0 mesh law [Law]. Companion: QNM-BUILD-1.0. Apache-2.0.
 https://github.com/AzielEliab/qnm-node
 
 Do not invent a DOI.
