@@ -21,6 +21,8 @@ from qnsd.vias.base import (
 
 class LightAdapter(BaseAdapter):
     name = "light"
+    mock = True
+    device_hook = "mock"
 
     def __init__(self) -> None:
         self.camera = Camera()

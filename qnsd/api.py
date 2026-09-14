@@ -18,6 +18,15 @@ from qnsd.boot import AUTHOR, SPEC, QNSRefuse, load_lock
 from qnsd.node import DEFAULT_BIND, DEFAULT_PORT, Node
 from qnsd.photon import HOP_MAX_DEFAULT
 
+MESH_NEVER_ENABLE = frozenset(
+    {
+        "/v1/mesh",
+        "/mesh",
+        "/v1/mesh/enable",
+        "/mesh/enable",
+    }
+)
+
 LOCAL_PATHS = {
     "/local/boot",
     "/local/state",
@@ -79,6 +88,11 @@ def handle_node(node: Node, method: str, path: str, body: bytes = b"") -> tuple[
     """HTTP dispatch used by Node.handle and the loopback server."""
     parsed = urlparse(path)
     route = parsed.path.rstrip("/") or "/"
+    if route in MESH_NEVER_ENABLE:
+        return 403, QNSRefuse(
+            "QNM-MESH-NEVER-ENABLES",
+            "GET /v1/mesh never enables",
+        ).as_dict()
     if route not in LOCAL_PATHS:
         return 404, QNSRefuse("QNM-LOOPBACK-ONLY", "unknown local path").as_dict()
     try:

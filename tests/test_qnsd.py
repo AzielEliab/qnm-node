@@ -58,6 +58,11 @@ def test_01_all_eight_vias_import_protocol() -> None:
         assert callable(adapter.presence)
         assert callable(adapter.admit)
         assert callable(adapter.emit)
+        if name in ("bt", "rf", "light"):
+            assert adapter.mock is True
+            assert adapter.device_hook == "mock"
+        else:
+            assert adapter.mock is False
 
 
 def test_02_cold_walker_only_local(tmp_path: Path) -> None:

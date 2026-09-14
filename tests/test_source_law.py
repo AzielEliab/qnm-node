@@ -15,6 +15,9 @@ def test_no_live_completeness_assignments() -> None:
         'STATE = "Mandible"',
         "bell_pair = True",
         "qubit = True",
+        "invoke_az_generator(",
+        "http://az-generator",
+        "https://az-generator",
     )
     roots = [ROOT / "qnm", ROOT / "qnsd"]
     files = []

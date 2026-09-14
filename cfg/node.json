@@ -33,6 +33,12 @@
   "sticky_via": false,
   "softwares_tab": false,
   "node_gate": false,
+  "az_generator": false,
+  "call_az_generator": false,
+  "public_qnsd_proxy": false,
+  "claim_clock": "miragegrid_claim",
+  "claim_is_stranger": true,
+  "fabric_spec": "FABRIC-MESH-PIPELINE-1.0",
   "mesh_enable": false,
   "via_order": [
     "lan",

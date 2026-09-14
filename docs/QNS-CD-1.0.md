@@ -15,7 +15,9 @@ law. The Worker does not serve the PDF. Git-hosted companion only.
 
 Local `qnsd` **owns vias**. Suite Workers **cite / proxy only**. This
 is **not** a Softwares-tab product. `GET /v1/mesh` **never enables**.
-There is **no Node Gate**.
+There is **no Node Gate** in this process. Node Gate is a MirageGrid
+subsystem only (outward claim; AZ Generator is not called from qnsd).
+See [FABRIC-MESH-PIPELINE-1.0](FABRIC-MESH-PIPELINE-1.0.md).
 
 ## §1 Identity
 

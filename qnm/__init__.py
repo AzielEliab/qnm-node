@@ -27,6 +27,7 @@ from qnm.apg import APG
 from qnm.archive import ChainArchive
 from qnm.boot import GENESIS_EMPTY, QNMRefuse, compute_install_root
 from qnm.coldcopy import ColdCopy
+from qnm.fabric import FABRIC_SPEC, Fabric
 from qnm.node import STATES, Node
 from qnm.pairs import HOP_MAX_DEFAULT, compute_pair_id, handshake_seal
 from qnm.score import score_local
@@ -34,7 +35,7 @@ from qnm.spiderweb import Spiderweb
 from qnm.nolie import NoLie
 from qnm.wires import Wires
 
-__version__ = "1.1.0"
+__version__ = "1.3.0"
 __author__ = "Aziel Eliab"
 __spec__ = "QNM-BUILD-1.0"
 __companion__ = "AIH-WP-1.3"
@@ -45,6 +46,7 @@ __reheal__ = "REHEAL-1.0"
 __survival__ = "CROSS-NETWORK-SURVIVAL-1.0"
 __nolie__ = "NO-LIE-1.0"
 __norewrite__ = "NO-REWRITE-1.0"
+__fabric__ = FABRIC_SPEC
 __pair_bind__ = "AIH-WP-1.3"
 __hub_law__ = "AIH-WP-1.1"
 
@@ -52,6 +54,8 @@ __all__ = [
     "APG",
     "ChainArchive",
     "ColdCopy",
+    "FABRIC_SPEC",
+    "Fabric",
     "GENESIS_EMPTY",
     "HOP_MAX_DEFAULT",
     "NoLie",

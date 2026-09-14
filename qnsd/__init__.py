@@ -8,7 +8,8 @@ Parents: QNS-WP-1.3 · QNM-BUILD-1.0 · AIH-WP-1.3 · APG · AZPIPE ·
 ChainLock. Author: Aziel Eliab only.
 
 Local process. Suite Workers cite/proxy only. Not a Softwares-tab
-product. GET /v1/mesh never enables. No Node Gate.
+product. GET /v1/mesh never enables. No Node Gate in this process
+(Node Gate is MirageGrid only). AZ Generator is not called from qnsd.
 """
 
 from __future__ import annotations
@@ -16,6 +17,7 @@ from __future__ import annotations
 from qnsd.boot import AUTHOR, SPEC, QNSRefuse
 from qnsd.node import STATES, Node
 from qnsd.photon import PHOTON_FIELDS, Photon, dumps, loads, photon_id
+from qnsd.sanitize import sanitize_photon, sanitize_via_payload
 from qnsd.vias import VIA_ORDER
 
 __version__ = "1.2.0"
