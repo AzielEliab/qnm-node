@@ -2,6 +2,9 @@
 
 COLD → LOCAL → LIVE → DEGRADED → ISOLATED → PHOENIX_LOCK → SCORCHED.
 
+PHOENIX-LOCK waits / re-seals locally after poison or isolation. It
+does not restore a public hostname. Public tunnels die with the pull.
+
 Photon is the packet. Restriction walks the next class. Packet id does
 not change across hops. API binds 127.0.0.1 only (see api.py).
 """
@@ -297,6 +300,7 @@ class Node:
         return self.snapshot()
 
     def arm_phoenix(self) -> dict[str, Any]:
+        """Wait / re-seal locally. Does not restore a public hostname."""
         self._require_not_scorched()
         self.phoenix.arm()
         self._advance("PHOENIX_LOCK")

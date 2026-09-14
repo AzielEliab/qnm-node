@@ -1,4 +1,8 @@
-"""§14.4 PHOENIX-LOCK waits locally. No controller hunt."""
+"""§14.4 PHOENIX-LOCK waits / re-seals locally after poison or isolation.
+
+No controller hunt. Not public hostname restore. Public tunnels and
+sites die with the pull. Mesh does not climb back onto a public name.
+"""
 
 from __future__ import annotations
 

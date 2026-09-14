@@ -6,11 +6,13 @@ Companion to `QNM-BUILD-1.0.md` and `AIH-WP-1.3.md`.
 
 | Paper | One line |
 | --- | --- |
-| [QNM-WP-1.0](./QNM-WP-1.0.md) | Quantum Node Mesh — local ON / public rollup OFF; cell 25 + 2 bridges |
-| [NODE-OPS-1.0](./NODE-OPS-1.0.md) | Node operations + surface law + phoenix loop |
+| [QNM-WP-1.0](./QNM-WP-1.0.md) | Quantum Node Mesh — local ON / public rollup dies with pull; cell 25 + 2 bridges |
+| [NODE-OPS-1.0](./NODE-OPS-1.0.md) | Node operations + surface law + phoenix wait / re-seal (not public hostname restore) |
 | [QNS-CD-1.0](./QNS-CD-1.0.md) | Quantum Node Signal Coding Design — local `qnsd` owns vias; photon packet |
 
-QNM-WP-1.0 absorbs BUILD+TOPO: local process ON, public rollup OFF; GET /v1/mesh never enables.
+QNM-WP-1.0 absorbs BUILD+TOPO: local process ON, public rollup OFF and
+dies with the pull; GET /v1/mesh never enables. Phoenix is wait /
+re-seal after poison or isolation — not restore of a public hostname.
 
 QNS-CD-1.0 is the coding design for the local `qnsd` process (parents:
 QNS-WP-1.3 · QNM-BUILD-1.0 · AIH-WP-1.3 · APG · AZPIPE · ChainLock).

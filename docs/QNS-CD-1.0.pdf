@@ -1,55 +1,68 @@
-%PDF-1.4
+%PDF-1.3
+%“Œ‹ž ReportLab Generated PDF document (opensource)
 1 0 obj
-<< /Type /Catalog /Pages 2 0 R >>
+<<
+/F1 2 0 R
+>>
 endobj
 2 0 obj
-<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+<<
+/BaseFont /Helvetica /Encoding /WinAnsiEncoding /Name /F1 /Subtype /Type1 /Type /Font
+>>
 endobj
 3 0 obj
-<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>
+<<
+/Contents 7 0 R /MediaBox [ 0 0 612 792 ] /Parent 6 0 R /Resources <<
+/Font 1 0 R /ProcSet [ /PDF /Text /ImageB /ImageC /ImageI ]
+>> /Rotate 0 /Trans <<
+
+>> 
+  /Type /Page
+>>
 endobj
 4 0 obj
-<< /Length 987 >>
-stream
-BT
-/F1 11 Tf
-14 TL
-/F1 14 Tf
-72 760 Td (QNS-CD-1.0  Quantum Node Signal Coding Design) Tj
-/F1 10 Tf
-0 -22 Td
-(Author: Aziel Eliab only) '
-(Parents: QNS-WP-1.3 / QNM-BUILD-1.0 / AIH-WP-1.3 / APG / AZPIPE / ChainLock) '
-() '
-(This PDF is the print companion of docs/QNS-CD-1.0.md.) '
-(The markdown is the law. The Worker does not serve this file.) '
-() '
-(Photon is the packet. QNS is the native medium. Light is camera-flash OCC.) '
-(Every send class lives in one local qnsd program.) '
-(Restriction walks the next class. Packet id does not change across hops.) '
-(VIA_ORDER = lan, plc, bt, rf, light, qns, operator, local) '
-(local + qns + operator always PRESENT. rf / plc / light need declare.) '
-(API binds 127.0.0.1 only. Sticky-via banned. SEAL independent of OS BT/Wi-Fi.) '
-(Anon-broadcast stays loopback sibling. GET /v1/mesh never enables. No Node Gate.) '
-(Suite Workers cite/proxy only. Not a Softwares-tab product.) '
-(Apache-2.0. Forks are welcome and always allowed.) '
-ET
-
-endstream
+<<
+/PageMode /UseNone /Pages 6 0 R /Type /Catalog
+>>
 endobj
 5 0 obj
-<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+<<
+/Author (Aziel Eliab) /CreationDate (D:20260914000537+00'00') /Creator (Aziel Eliab) /Keywords () /ModDate (D:20260914000537+00'00') /Producer (ReportLab PDF Library - \(opensource\)) 
+  /Subject (unspecified) /Title (QNS-CD-1.0) /Trapped /False
+>>
+endobj
+6 0 obj
+<<
+/Count 1 /Kids [ 3 0 R ] /Type /Pages
+>>
+endobj
+7 0 obj
+<<
+/Filter [ /ASCII85Decode /FlateDecode ] /Length 1001
+>>
+stream
+Gas1]?$"^R&:ErM\As&+K..rh1OUCa8XWIqK%kDDdLiq'.^J,-EX;X:?/&3(RE!.'YYWj;h<h?HlJWQ/CQ]?:`RMR-.-OUBVI8<m.%X9Q^H0@>FaWD6:@[8(ik/(M_]HcW]tTsh]udYupcY@`OssJp1tO1SV:[1CBqeP"2K[1qhVV0-PN''t;0k)ls8Nr)7lA;rFI>%R2#]):UehE,,-Br*hfR0Tp':9,L`*@c]qh[NLBpnoV_2:>HWOROZ_m"?NMdjoS)`_@>/*SV.)a"K@m\F^Z@*T@W!DkM^#?r7Xs;5FV<Ic1nE2Q%Kb;I)U@WscTbZfLV)km;dkL__oj<@lNr"O<S8r5MWSXUaC<:W_<>uJ&Cq2i<DFnP4QCCC):[m1D8D]MX3-r-/Zbp0,mIXc0JgFXhr+aBpOCCrb0'B2^F.[&RPIYE]@6$9j>>&Qa>"g7pAIKK.Kob$U;8#RN_'r"iM(K$-9qbj`5\.Wo9efV\0e@7bfPfEPkLLN5\8(Rr-F\bfq3,S*I#@3D8>N0R,oKW#:+S+<2.X;&/O2V>ce%FVa5[(Z]Vc:u7<PPj8V^?L6Y>.?+.,WtWkCd2^f6g^SYi(s1S7r0NbI-q<uo;,4AAN;fH*Ys&!u6;p&P7%!u,O1L*ep,ib6fJ.,\pkYWRrCZk=jr0^(MRg%0jMG<RUL8@Em6;(u0.V0Iko31b\dPS]u"Y,at(=Q5Y24p^UH[%NsK6q8=8iI(LHRk5tZ^l*.IAK1&?cD5=>,59%,%]V.gYa',81o2M!W,)Jo)]hGkQ$>?0C*3Xr5UmN18r<bY>,S#i.%gmV'$UG?'qBHaAW>J<.9k.'%JaM1Q+&N;V$XK4T<"?A=r/]FMl]0m[INK>`'sG<FE7pZ-k<Kq=)90CA2r2c<I2hn)dE81'?a:`U[;JH]Q@S=Vu;1P3>uM:e8)Mqq:9Vs7'WAMM/13R*0^G]BADf?!d"MI9?9C\/ocYTIdlJcHJh?_pcis=^%qh[ajuU~>endstream
 endobj
 xref
-0 6
+0 8
 0000000000 65535 f 
-0000000009 00000 n 
-0000000058 00000 n 
-0000000115 00000 n 
-0000000241 00000 n 
-0000001279 00000 n 
+0000000061 00000 n 
+0000000092 00000 n 
+0000000199 00000 n 
+0000000392 00000 n 
+0000000460 00000 n 
+0000000727 00000 n 
+0000000786 00000 n 
 trailer
-<< /Size 6 /Root 1 0 R >>
+<<
+/ID 
+[<d7b4028298c57fa89390435cd26345fd><d7b4028298c57fa89390435cd26345fd>]
+% ReportLab generated PDF document -- digest (opensource)
+
+/Info 5 0 R
+/Root 4 0 R
+/Size 8
+>>
 startxref
-1349
+1878
 %%EOF

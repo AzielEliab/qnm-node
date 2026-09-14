@@ -14,6 +14,7 @@ QNM-WP-1.0                                                                      
 
     A local process that stays on, hashes through radio failure, airlocks inbound, isolates poison, rotates
     ephemeral IDs in cells of 25 with two bridging members, and never pretends the public Worker is that cell.
+    Phoenix waits / re-seals after poison or isolation. Public tunnels and sites die with the pull.
 
  1. What QNM is not
    • Not qubit hardware. Not a login mesh or account system.
@@ -25,9 +26,13 @@ QNM-WP-1.0                                                                      
   Plane                                Default                                Law
 
   A — local qnm-node                   Process ON. Bearers attempt.           Zero radios: process still ON, ledger appends, bearers empty.
+                                                                              After a public pull the local node may keep verifying
+                                                                              and appending. It does not climb back onto the hostname.
 
-  B — public rollup                    enabled=false. GET never enables.      Counts only. No Node Gate. No fake 25 peers. Views/MCP out
-                                                                              of QNM-S.
+  B — public rollup                    enabled=false. GET never enables.      Counts only while the public surface exists.
+                                                                              Sites pulled → rollup down (die with the pull).
+                                                                              No Node Gate. No fake 25 peers. Views/MCP out
+                                                                              of QNM-S. Phoenix does not restore this plane.
 
 
 
@@ -47,13 +52,14 @@ QNM-WP-1.0                                                                      
 
  5. Mesh ID
  assign: mesh_id = SHA-256(prev_id || utc || nonce || cell_id). Session token, not a person. Spend on rotate, poison, or
- phoenix rejoin. Spent IDs never reuse in the same cell. Catalog form: miragegrid/assign (live). miragegrid/mesh, vpn-hop,
- hop, tunnel stay stub.
+ phoenix wait / re-seal. Spent IDs never reuse in the same cell. Catalog form: miragegrid/assign (live).
+ miragegrid/mesh, vpn-hop, hop, tunnel stay stub. Phoenix does not restore a public hostname.
 
  6. States
   Kind                    Values                                           Meaning
 
-  Member                  live | isolated | phoenix | spent                spent ID must assign before rejoin
+  Member                  live | isolated | phoenix | spent                spent ID must assign before any later
+                                                                           local cell join (not a public hostname restore)
 
   Cell                    forming | full | degraded | locked               locked after bridge-pair loss until two live bridges sit
 
@@ -65,7 +71,7 @@ QNM-WP-1.0                                                                      
 
 
 
-Fabric concept 100% · local ON / public rollup · 2026-09-06                                                                               page 1
+Fabric concept 100% · local ON / public rollup dies with pull · 2026-09-06                                                                page 1
 
 
 QNM-WP-1.0                                                                                          Aziel Eliab · public work identity only
@@ -81,21 +87,24 @@ QNM-WP-1.0                                                                      
  8. Bridge rotation and phoenix
  Rotate both bridges as a pair on interval, on poison of either, or on operator act. Spent pair cannot carry traffic (refuse
  bridge_spent). A cell with fewer than two live members stays local-only.
- Phoenix: wait. No controller hunt. No public callback. Declare comms clean. assign new mesh_id. Rejoin as leaf unless
- seating a new bridge pair. Phoenix wait is an act.
+ Phoenix: wait / re-seal after poison or isolation. No controller hunt. No public callback. Does not restore a
+ public hostname, .uk, Cloudflare tunnel, Worker, or public rollup. A later local assign of a new mesh_id is a
+ separate operator act on the local cell — not Phoenix climbing back onto the public name. Phoenix wait is an act.
 
  9. Tethers and siblings
  Leaf tethers only inside its cell. Bridge tethers only to the other cell’s current bridge pair. Poison cuts first.
  MirageGrid = ID assign. AzielTether = downloaded-copy survival. AZNet and AZMail are other slugs. TemporalLock /
- AZL-LEDGER record every mesh act. FragGate slug=mesh is Worker rollup, not the full node.
+ AZL-LEDGER record every mesh act. FragGate slug=mesh is Worker rollup, not the full node. That rollup dies with the pull.
 
  10. Never / close tests
    • Do not draw 25 peers on a public page that does not host them.
    • Do not enable mesh with a GET. Do not reuse a spent mesh_id.
    • Do not route inter-cell traffic through a leaf. Do not call MirageGrid a VPN.
    • Do not store passwords in node state. Do not claim qubits.
-   • Concept is closed when both planes, cell math, ID spend, leaf-vs-bridge poison, phoenix-without-hunt, and stub names
-   are specified — they are.
+   • Do not read Phoenix as “bring the .uk / public node back.” Sites pulled → public rollup down.
+     Local node may keep verifying and appending. Mesh does not climb back onto the public hostname by itself.
+   • Concept is closed when both planes, cell math, ID spend, leaf-vs-bridge poison, phoenix wait / re-seal
+     without hunt or hostname restore, die-with-pull, and stub names are specified — they are.
  Specified 2026-09-06. Building qnm-node is implementation. This paper is the concept at 100%. Public identity: Aziel
  Eliab only.
 
@@ -104,4 +113,4 @@ QNM-WP-1.0                                                                      
 
 
 
-Fabric concept 100% · local ON / public rollup · 2026-09-06                                                                         page 2
+Fabric concept 100% · local ON / public rollup dies with pull · 2026-09-06                                                          page 2
