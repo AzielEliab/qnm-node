@@ -563,6 +563,37 @@ def scripted_runner(script: dict[tuple[str, ...], dict[str, Any] | str]) -> Runn
     return _run
 
 
+def claim_live(name: str, *, runner: Runner | None = None) -> dict[str, Any]:
+    """LIVE only when the OS adapter is present. Fake LIVE refuses."""
+    from qnm.boot import QNMRefuse
+
+    card = probe(name, runner=runner)
+    if card.get("invented"):
+        raise QNMRefuse("QNS-RADIO-NOT-LIVE", "fake LIVE radio without adapter")
+    if not card.get("live"):
+        raise QNMRefuse(
+            str(card.get("refuse_code") or REFUSE_CODES.get(name) or "QNS-RADIO-NOT-LIVE"),
+            "radio LIVE only on presence",
+        )
+    return card
+
+
+def refuse_fake_live(
+    name: str,
+    *,
+    claimed_live: bool = True,
+    adapter_present: bool = False,
+) -> None:
+    """Sim helper: invented LIVE without an adapter is refuse."""
+    from qnm.boot import QNMRefuse
+
+    if claimed_live and not adapter_present:
+        raise QNMRefuse(
+            "QNS-RADIO-NOT-LIVE",
+            f"fake LIVE {name} radio without adapter",
+        )
+
+
 def env_runner() -> Runner | None:
     """Optional QNM_PHY_SCRIPT JSON for hermetic tests. Default is live OS."""
     raw = os.environ.get("QNM_PHY_SCRIPT")

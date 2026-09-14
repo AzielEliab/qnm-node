@@ -216,6 +216,28 @@ class ChainArchive:
     def refuse_index(self, *_args: object, **_kwargs: object) -> None:
         raise QNMRefuse("QNM-ARCHIVE-NO-INDEX", "re-expand is not mesh growing from an index")
 
+    def restore(
+        self,
+        archive_path: Path,
+        *,
+        digest: str | None = None,
+    ) -> dict[str, Any]:
+        """Restore a packed tip only with a matching tarball digest. Unsigned refuses."""
+        expect = str(digest or "").strip().lower()
+        if not expect:
+            raise QNMRefuse("QNM-TIP-UNSIGNED", "unsigned tip restore refused")
+        path = Path(archive_path)
+        if not path.is_file():
+            raise QNMRefuse("QNM-ARCHIVE-MISSING", "archive file missing")
+        got = sha256_hex(path.read_bytes())
+        if got != expect:
+            raise QNMRefuse("QNM-TIP-UNSIGNED", "tip restore digest mismatch")
+        verified = self.verify(path)
+        verified["digest"] = got
+        verified["signed"] = True
+        verified["restored"] = True
+        return verified
+
     def _refuse_weights_name(self, path: Path) -> None:
         if _is_weight_name(path.name):
             raise QNMRefuse("QNM-ARCHIVE-NOT-WEIGHTS", "weights are not the tarball")

@@ -379,6 +379,12 @@ class Planes:
             "Plane B DOI is null; do not invent a Zenodo DOI",
         )
 
+    def refuse_invent_shelf(self, *_args: object, **_kwargs: object) -> None:
+        raise QNMRefuse(
+            "QNM-NO-FAN-SHELF",
+            "Plane B shelf URL must be hash-verified https Codeberg / archive.org / GitFlic; do not invent a DOI/URL",
+        )
+
     def refuse_invent_airgap(self, *_args: object, **_kwargs: object) -> None:
         raise QNMRefuse(
             "QNM-NO-FAN-AIRGAP",

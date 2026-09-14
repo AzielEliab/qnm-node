@@ -48,6 +48,7 @@ from qnm.bitmesh import Bitmesh, refuse_public_geo
 from qnm.coldcopy import DEVICE_CLASSES, ColdCopy
 from qnm.fabric import CLAIM_CLOCK, FABRIC_SPEC, Fabric, mesh_never_enables
 from qnm.planes import Planes
+from qnm.surface import SECURITY_HEADERS, refuse_wan_bind, require_operator_token, token_from_headers
 from qnsd.vias import radios_stamp
 from qnm.unkillability import compute_unkillability
 from qnm.memorial import Memorial
@@ -115,6 +116,10 @@ LOCAL_PATHS = {
     "/local/planes",
     "/local/channels",
     "/local/phy",
+    "/local/surface",
+    "/local/shelf",
+    "/local/export",
+    "/local/redline",
 }
 
 
@@ -315,6 +320,11 @@ class Node:
             "outbox": self.outbox.list(),
             "chain": {"ok": chain["ok"], "length": chain["length"], "tip": chain["tip"]},
             "bind": DEFAULT_BIND,
+            "wan_bind": False,
+            "control_plane": "qnm",
+            "qnsd_http_default": False,
+            "token_in_git": False,
+            "rewrite_key": False,
         }
 
     def boot(
@@ -990,6 +1000,8 @@ class Node:
         op = str(body.get("op") or body.get("action") or "status")
         if op in ("invent_doi", "fake_doi"):
             self.planes.refuse_invent_doi()
+        if op in ("invent_shelf", "fake_shelf", "fake_url"):
+            self.planes.refuse_invent_shelf()
         if op in ("invent_airgap", "fake_verify"):
             self.planes.refuse_invent_airgap()
         if op in ("plane_c_live", "live_c", "fan"):
@@ -1172,6 +1184,85 @@ class Node:
             return self.nolie.publish(str(body.get("tip") or self.chain.tip))
         return self.nolie.status()
 
+    def shelf_act(self, payload: dict[str, Any] | None = None) -> dict[str, Any]:
+        """Operator-key shelf wrap / restore. No invented key."""
+        from qnm.shelf import decrypt_pack, encrypt_pack, restore_signed
+
+        self._require_not_scorched()
+        body = dict(payload or {})
+        op = str(body.get("op") or body.get("action") or "status")
+        if op in ("encrypt", "wrap", "pack"):
+            raw = body.get("body") or body.get("pack") or b""
+            rec = encrypt_pack(
+                raw if isinstance(raw, (bytes, bytearray, str)) else json.dumps(raw),
+                key=body.get("key"),
+                key_file=body.get("key_file"),
+            )
+            self._write_receipt("shelf_encrypt", {"alg": rec.get("alg"), "plain_digest": rec.get("plain_digest")})
+            return rec
+        if op in ("decrypt", "open"):
+            envelope = dict(body.get("envelope") or body)
+            opened = decrypt_pack(
+                envelope,
+                key=body.get("key"),
+                key_file=body.get("key_file"),
+            )
+            return {"ok": True, "bytes": len(opened), "digest": sha256_hex(opened)}
+        if op in ("restore", "unsigned"):
+            return restore_signed(
+                body.get("body") or b"",
+                body.get("digest"),
+                envelope=body.get("envelope"),
+                key=body.get("key"),
+                key_file=body.get("key_file"),
+            )
+        return {
+            "ok": True,
+            "spec": "QNM-SHELF-1.0",
+            "key_in_git": False,
+            "key_env": "QNM_SHELF_KEY",
+            "author": AUTHOR,
+        }
+
+    def export_act(self, payload: dict[str, Any] | None = None) -> dict[str, Any]:
+        """Fold + export a tip pack. Non-local plaintext refuses."""
+        from qnm.fold import fold_sensitive
+        from qnm.shelf import export_tip
+
+        self._require_not_scorched()
+        body = dict(payload or {})
+        raw = body.get("body") or body.get("pack")
+        if raw is None and self.chain.path.is_file():
+            raw = self.chain.path.read_bytes()
+        folded = fold_sensitive(dict(body))
+        if body.get("secret") or body.get("password") or body.get("private_key"):
+            _ = folded
+        rec = export_tip(
+            raw if raw is not None else b"",
+            dest=str(body.get("dest") or "local"),
+            key=body.get("key"),
+            key_file=body.get("key_file"),
+            tls=bool(body.get("tls")),
+            operator_plaintext_export=bool(body.get("operator_plaintext_export")),
+            encrypt=body.get("encrypt", True),
+        )
+        rec["fold"] = folded
+        self._write_receipt(
+            "tip_export",
+            {
+                "dest": rec.get("dest"),
+                "remote": bool(rec.get("remote")),
+                "plaintext": bool(rec.get("plaintext")),
+            },
+        )
+        return rec
+
+    def claim_live_radio(self, name: str) -> dict[str, Any]:
+        """Radio LIVE only on OS presence. Fake LIVE without adapter refuses."""
+        from qnsd.phy import claim_live
+
+        return claim_live(name)
+
     def archive_act(self, payload: dict[str, Any]) -> dict[str, Any]:
         op = str(payload.get("op") or payload.get("action") or "pack")
         if op == "weights":
@@ -1182,6 +1273,13 @@ class Node:
             return self.verify_archive(str(payload.get("path") or ""))
         if op == "reexpand":
             return self.reexpand_from(payload)
+        if op in ("restore", "unsigned"):
+            if op == "unsigned" or not payload.get("digest"):
+                raise QNMRefuse("QNM-TIP-UNSIGNED", "unsigned tip restore refused")
+            return self.archive.restore(
+                Path(str(payload.get("path") or "")),
+                digest=str(payload.get("digest") or ""),
+            )
         raise QNMRefuse("QNM-ARCHIVE-BYTES", f"unknown archive op:{op}")
 
     def _refuse_wire_op(self, op: str) -> None:
@@ -1373,6 +1471,20 @@ class Node:
         if route == "/local/planes" and method == "POST":
             payload = json.loads(body.decode("utf-8") or "{}") if body else {}
             return self.planes_act(payload)
+        if route == "/local/surface" and method == "GET":
+            from qnm.surface import attack_surface_map
+
+            return attack_surface_map()
+        if route == "/local/redline" and method == "GET":
+            from qnm.surface import redline_checklist
+
+            return redline_checklist()
+        if route == "/local/shelf" and method == "POST":
+            payload = json.loads(body.decode("utf-8") or "{}") if body else {}
+            return self.shelf_act(payload)
+        if route == "/local/export" and method == "POST":
+            payload = json.loads(body.decode("utf-8") or "{}") if body else {}
+            return self.export_act(payload)
         raise QNMRefuse("QNM-LOOPBACK-ONLY", f"{method} {route}")
 
 
@@ -1391,19 +1503,30 @@ class _Handler(BaseHTTPRequestHandler):
         self.send_response(code)
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(raw)))
+        for name, value in SECURITY_HEADERS:
+            self.send_header(name, value)
         self.end_headers()
         self.wfile.write(raw)
 
-    def do_GET(self) -> None:  # noqa: N802
+    def _gate(self) -> bool:
         if not self._client_ok():
             self._send(403, QNMRefuse("QNM-LOOPBACK-ONLY", "127.0.0.1 only").as_dict())
+            return False
+        try:
+            require_operator_token(token_from_headers(self.headers))
+        except QNMRefuse as exc:
+            self._send(403, exc.as_dict())
+            return False
+        return True
+
+    def do_GET(self) -> None:  # noqa: N802
+        if not self._gate():
             return
         code, payload = self.node.handle("GET", self.path, b"")
         self._send(code, payload)
 
     def do_POST(self) -> None:  # noqa: N802
-        if not self._client_ok():
-            self._send(403, QNMRefuse("QNM-LOOPBACK-ONLY", "127.0.0.1 only").as_dict())
+        if not self._gate():
             return
         length = int(self.headers.get("Content-Length") or 0)
         body = self.rfile.read(length) if length else b""
@@ -1411,11 +1534,17 @@ class _Handler(BaseHTTPRequestHandler):
         self._send(code, payload)
 
 
-def serve(node: Node, host: str = DEFAULT_BIND, port: int = DEFAULT_PORT) -> ThreadingHTTPServer:
-    if host not in ("127.0.0.1", "localhost", "::1"):
-        raise QNMRefuse("QNM-LOOPBACK-ONLY", "bind 127.0.0.1 only")
+def serve(
+    node: Node,
+    host: str = DEFAULT_BIND,
+    port: int = DEFAULT_PORT,
+    *,
+    tls: bool = False,
+    operator_wan: bool = False,
+) -> ThreadingHTTPServer:
+    bind = refuse_wan_bind(host, tls=tls, operator_wan=operator_wan)
     handler = type("QNMHandler", (_Handler,), {"node": node})
-    server = ThreadingHTTPServer((host, port), handler)
+    server = ThreadingHTTPServer((bind, port), handler)
     return server
 
 
@@ -1468,6 +1597,9 @@ def main(argv: list[str] | None = None) -> int:
                 "az_generator": False,
                 "mesh_enable": False,
                 "zenodo_required": False,
+                "control_plane": "qnm",
+                "wan_bind": False,
+                "redline": "REDLINE-1.0",
             }
             print(json.dumps(report, indent=2, sort_keys=True))
             return 0

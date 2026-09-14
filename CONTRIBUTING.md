@@ -21,8 +21,10 @@ Python 3.10+. Core is stdlib only. pytest is the dev extra. No network.
 1. **Identity is Aziel Eliab only.**
 2. Radios stay off until fabric enable; then the software path is ON.
    OS PHYs (cellular/mmcli, Wi-Fi/NM, BlueZ, gpsd, libnfc/PCSC) stamp
-   LIVE | ABSENT | REFUSED — never mock chatter. Local API binds
-   127.0.0.1 only. GET /v1/mesh never enables.
+   LIVE | ABSENT | REFUSED — never mock chatter. Radio LIVE only on
+   adapter presence. Local API binds 127.0.0.1 only. qnm is the one
+   local door. GET /v1/mesh never enables. Token / shelf key never in
+   git. Plaintext tip export off-loopback refuses.
 3. Receipts go to disk. Chain is append-only.
 4. Poison is refused, not interpreted (APG).
 5. Tamper isolates. No auto-heal.

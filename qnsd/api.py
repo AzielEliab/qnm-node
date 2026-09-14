@@ -15,6 +15,7 @@ from typing import Any
 from urllib.parse import urlparse
 
 from qnm.fabric import mesh_never_enables
+from qnm.surface import SECURITY_HEADERS, refuse_wan_bind, require_operator_token, token_from_headers
 from qnsd.boot import AUTHOR, SPEC, QNSRefuse, load_lock
 from qnsd.node import DEFAULT_BIND, DEFAULT_PORT, Node
 from qnsd.photon import HOP_MAX_DEFAULT
@@ -53,19 +54,31 @@ class _Handler(BaseHTTPRequestHandler):
         self.send_response(code)
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(raw)))
+        for name, value in SECURITY_HEADERS:
+            self.send_header(name, value)
         self.end_headers()
         self.wfile.write(raw)
 
-    def do_GET(self) -> None:  # noqa: N802
+    def _gate(self) -> bool:
         if not self._client_ok():
             self._send(403, QNSRefuse("QNM-LOOPBACK-ONLY", "127.0.0.1 only").as_dict())
+            return False
+        try:
+            require_operator_token(token_from_headers(self.headers))
+        except Exception as exc:  # QNMRefuse
+            payload = exc.as_dict() if hasattr(exc, "as_dict") else QNSRefuse("QNM-AUTH", str(exc)).as_dict()
+            self._send(403, payload)
+            return False
+        return True
+
+    def do_GET(self) -> None:  # noqa: N802
+        if not self._gate():
             return
         code, payload = self.node.handle("GET", self.path, b"")
         self._send(code, payload)
 
     def do_POST(self) -> None:  # noqa: N802
-        if not self._client_ok():
-            self._send(403, QNSRefuse("QNM-LOOPBACK-ONLY", "127.0.0.1 only").as_dict())
+        if not self._gate():
             return
         length = int(self.headers.get("Content-Length") or 0)
         body = self.rfile.read(length) if length else b""
@@ -73,11 +86,19 @@ class _Handler(BaseHTTPRequestHandler):
         self._send(code, payload)
 
 
-def serve(node: Node, host: str = DEFAULT_BIND, port: int = DEFAULT_PORT) -> ThreadingHTTPServer:
-    if host not in ("127.0.0.1", "localhost", "::1"):
-        raise QNSRefuse("QNM-LOOPBACK-ONLY", "bind 127.0.0.1 only")
+def serve(
+    node: Node,
+    host: str = DEFAULT_BIND,
+    port: int = DEFAULT_PORT,
+    *,
+    tls: bool = False,
+    operator_wan: bool = False,
+    extra_door: bool = True,
+) -> ThreadingHTTPServer:
+    _ = extra_door
+    bind = refuse_wan_bind(host, tls=tls, operator_wan=operator_wan)
     handler = type("QNSDHandler", (_Handler,), {"node": node})
-    return ThreadingHTTPServer((host, port), handler)
+    return ThreadingHTTPServer((bind, port), handler)
 
 
 def handle_node(node: Node, method: str, path: str, body: bytes = b"") -> tuple[int, dict[str, Any]]:
@@ -215,6 +236,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("cmd", nargs="?", default="state", help="boot|state|serve|doctor")
     parser.add_argument("--root", default=".", help="install root directory")
     parser.add_argument("--port", type=int, default=DEFAULT_PORT)
+    parser.add_argument(
+        "--operator-extra-door",
+        action="store_true",
+        help="open a second loopback HTTP door (qnm is the default control plane)",
+    )
     args = parser.parse_args(argv)
     root = Path(args.root).resolve()
     node = attach_handle(Node(root))
@@ -250,9 +276,19 @@ def main(argv: list[str] | None = None) -> int:
             print(json.dumps(report, indent=2, sort_keys=True))
             return 0
         if args.cmd == "serve":
+            if not args.operator_extra_door:
+                raise QNSRefuse(
+                    "QNM-ONE-DOOR",
+                    "qnm is the local control plane; qnsd serve needs --operator-extra-door",
+                )
             if node.state == "COLD":
                 node.boot()
-            server = serve(node, DEFAULT_BIND, port if args.port == DEFAULT_PORT else args.port)
+            server = serve(
+                node,
+                DEFAULT_BIND,
+                port if args.port == DEFAULT_PORT else args.port,
+                extra_door=True,
+            )
             print(
                 json.dumps(
                     {

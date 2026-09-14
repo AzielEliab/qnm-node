@@ -17,3 +17,6 @@ data/receipts/*
 data/witness/*
 !data/witness/.gitkeep
 *.tmp
+*.shelf.key
+.qnm-shelf-key
+.env
