@@ -14,7 +14,12 @@ from __future__ import annotations
 from typing import Any
 
 from qnm.boot import AUTHOR, SPEC
-from qnsd.azpipe import fld3_wire, foldlock_available
+
+
+def _azpipe():
+    from qnsd.azpipe import fld3_wire, foldlock_available
+
+    return fld3_wire, foldlock_available
 
 FOLD_SPEC = "FOLD-EXPORT-1.0"
 FOLDLOCK_SLUG = "foldlock"
@@ -23,7 +28,9 @@ FOLDLOCK_ONE_LINE = "Algorithmic tether-word suppression on UTF-8 text. Not zip.
 
 
 def foldlock_cite() -> dict[str, Any]:
-    have = foldlock_available()
+    _fld3, available = _azpipe()
+    _ = _fld3
+    have = available()
     return {
         "slug": FOLDLOCK_SLUG,
         "digest": FOLDLOCK_DIGEST,
@@ -41,6 +48,7 @@ def foldlock_cite() -> dict[str, Any]:
 
 def fold_sensitive(payload: dict[str, Any]) -> dict[str, Any]:
     """Fold secrets / off-origin URLs on export. Refuse is APG's job."""
+    fld3_wire, _available = _azpipe()
     folded = fld3_wire(dict(payload))
     cite = foldlock_cite()
     return {
