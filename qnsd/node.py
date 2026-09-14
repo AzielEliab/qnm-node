@@ -126,7 +126,7 @@ class Node:
         )
 
     def arm_fabric(self) -> dict[str, Any]:
-        """Arm RF / BT / Wi-Fi / photon. PHY hooks stay HOOK-PENDING."""
+        """Allow RF / BT / Wi-Fi / photon software paths. Soft radios stay MOCK."""
         self.fabric_armed = True
         for name in ("rf", "bt", "wifi", "light", "lan", "plc"):
             rec = dict(self.declared.get(name) or {})
@@ -152,6 +152,10 @@ class Node:
             "ok": True,
             "armed": True,
             "fabric_armed": True,
+            "radios": "software-on",
+            "radios_status": "MOCK",
+            "radios_fielded": False,
+            "channels_on_means": "software path allowed; not fielded PHY",
             "live_rf_mesh": False,
             "presence": {name: self.stack.adapters[name].presence(self.ctx()) for name in VIA_ORDER},
             "spec": SPEC,
@@ -211,7 +215,10 @@ class Node:
             "presence": presences,
             "declared": dict(self.declared),
             "policy": self.policy.snapshot(),
-            "radios": "armed" if self.fabric_armed else "off",
+            "radios": "software-on" if self.fabric_armed else "off",
+            "radios_fielded": False,
+            "radios_status": "MOCK",
+            "channels_on_means": "software path allowed; not fielded PHY",
             "fabric_armed": self.fabric_armed,
             "live_rf_mesh": False,
             "sticky_via": False,

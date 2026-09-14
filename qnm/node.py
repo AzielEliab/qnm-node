@@ -48,6 +48,7 @@ from qnm.bitmesh import Bitmesh, refuse_public_geo
 from qnm.coldcopy import DEVICE_CLASSES, ColdCopy
 from qnm.fabric import CLAIM_CLOCK, FABRIC_SPEC, Fabric
 from qnm.planes import Planes
+from qnsd.vias import radios_stamp
 from qnm.unkillability import compute_unkillability
 from qnm.memorial import Memorial
 from qnm.nolie import NoLie, receipt_digest
@@ -278,7 +279,10 @@ class Node:
             "hub_law": HUB_LAW,
             "pair_bind": PAIR_SPEC,
             "bearers": self.bearers.snapshot(),
-            "radios": "armed" if self.fabric.enabled else "off",
+            "radios": radios_stamp(self.fabric.enabled),
+            "radios_fielded": False,
+            "radios_status": "MOCK",
+            "channels_on_means": "software path allowed; not fielded PHY",
             "auto_heal": False,
             "live_from_site_ping": False,
             "phoenix": self.phoenix.status(),
@@ -987,6 +991,8 @@ class Node:
             self.planes.refuse_invent_doi()
         if op in ("invent_airgap", "fake_verify"):
             self.planes.refuse_invent_airgap()
+        if op in ("plane_c_live", "live_c", "fan"):
+            self.planes.refuse_plane_c_live()
         if op in ("seat_b", "zenodo", "doi"):
             rec = self.planes.seat_zenodo_doi(body.get("doi"))
             self._write_receipt("plane_b_doi", {"doi": rec.get("doi"), "status": rec.get("status")})
@@ -1414,7 +1420,9 @@ def main(argv: list[str] | None = None) -> int:
                 "companion": COMPANION,
                 "hub_law": HUB_LAW,
                 "pair_bind": PAIR_SPEC,
-                "radios": "armed" if node.fabric.enabled else "off",
+                "radios": radios_stamp(node.fabric.enabled),
+                "radios_fielded": False,
+                "radios_status": "MOCK",
                 "bind": DEFAULT_BIND,
                 "hop_max": HOP_MAX_DEFAULT,
                 "bell_pair": False,

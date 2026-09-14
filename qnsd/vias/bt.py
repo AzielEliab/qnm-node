@@ -1,18 +1,18 @@
-"""Bluetooth via — protocol-complete; no OS radio.
+"""Bluetooth via — software MOCK. Protocol-complete; no OS radio.
 
-Fabric-armed posture is ON. Emit without a real driver is HOOK-PENDING.
-Do not claim a live BT packet flew.
+Channels-ON allows the software path. Emit without a fielded PHY is
+HOOK-PENDING refuse. Do not claim a live BT packet flew.
 """
 
 from __future__ import annotations
 
-from qnsd.vias.base import PRESENT, BaseAdapter, ViaContext
+from qnsd.vias.base import MOCK, PRESENT, BaseAdapter, ViaContext
 
 
 class BtAdapter(BaseAdapter):
     name = "bt"
     mock = True
-    device_hook = "HOOK-PENDING"
+    device_hook = MOCK
     protocol = "ViaAdapter"
 
     def presence(self, ctx: ViaContext) -> str:

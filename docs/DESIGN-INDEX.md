@@ -33,6 +33,7 @@ Print companion: `QNS-CD-1.0.pdf` (git-hosted; Worker does not serve).
 FABRIC-MESH-PIPELINE-1.0 locks the local order (APG → wires → vias →
 photon → outbox → phoenix / reheal / cold-copy). MirageGrid claim
 clock is an external stranger to qnm tip and dwell clocks. When
-fabric-enabled, RF / BT / Wi-Fi / photon arm ON. Physical Bluetooth /
-RF / Wi-Fi / camera hooks stay HOOK-PENDING until a PHY binds. Public
-receipts stay no user/geo.
+fabric-enabled, RF / BT / Wi-Fi / photon software paths may be ON.
+Physical Bluetooth / RF / Wi-Fi / photon / camera / bitmesh stay
+**MOCK** until a fielded PHY exists. Public receipts stay no user/geo.
+Plane C USB airgap requires operator offline-verify/attest before LIVE.

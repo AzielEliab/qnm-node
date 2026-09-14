@@ -4,8 +4,9 @@ A = public hub mirrors. Today: LIVE on the same Cloudflare tunnel.
     Not four independent copies.
 B = Zenodo tip-pack. SLOT until a real DOI is seated. doi is null
     until then. Do not invent a DOI.
-C = USB airgap tip-pack. READY until an offline-verify receipt is
-    written. Ready is not verified.
+C = USB airgap tip-pack. READY until an operator offline-verify /
+    attest receipt is written. Ready is not verified. Operator
+    offline-verify/attest is required before LIVE. No FAN.
 
 Author: Aziel Eliab only.
 """
@@ -90,8 +91,13 @@ class Planes:
                 "pack_tip": None,
                 "pack_tip_prefix": PACK_TIP_PREFIX,
                 "offline_verify": False,
+                "attest_required": True,
+                "operator_offline_verify_required": True,
+                "before_live": "operator offline-verify/attest required",
                 "kind": "READY",
                 "live": False,
+                "fan": False,
+                "no_fan": True,
             },
         }
 
@@ -126,6 +132,13 @@ class Planes:
     def snapshot(self) -> dict[str, Any]:
         b_doi = self._state["plane_b"].get("doi")
         c_ok = bool(self._state["plane_c"].get("offline_verify"))
+        plane_c = dict(self._state["plane_c"])
+        plane_c["attest_required"] = True
+        plane_c["operator_offline_verify_required"] = True
+        plane_c["before_live"] = "operator offline-verify/attest required"
+        plane_c["fan"] = False
+        plane_c["no_fan"] = True
+        plane_c["live"] = False
         return {
             "ok": True,
             "spec": PLANES_SPEC,
@@ -133,12 +146,15 @@ class Planes:
             "author": AUTHOR,
             "plane_a": dict(self._state["plane_a"]),
             "plane_b": dict(self._state["plane_b"]),
-            "plane_c": dict(self._state["plane_c"]),
+            "plane_c": plane_c,
             "gates": {
                 "plane_b_doi": bool(valid_zenodo_doi(b_doi)),
                 "plane_c_offline_verify": c_ok,
+                "plane_c_attest": c_ok,
                 "fielded_ready": bool(valid_zenodo_doi(b_doi) and c_ok),
             },
+            "no_fan": True,
+            "plane_c_before_live": "operator offline-verify/attest required",
         }
 
     def seat_zenodo_doi(self, doi: str | None) -> dict[str, Any]:
@@ -175,12 +191,15 @@ class Planes:
         *,
         pack_tip: str | None = None,
     ) -> dict[str, Any]:
-        """Offline verify of USB airgap bytes. Missing body is not success."""
+        """Operator offline-verify / attest of USB airgap bytes.
+
+        Missing body is not success. READY is not LIVE. No FAN.
+        """
         raw = body.encode("utf-8") if isinstance(body, str) else bytes(body)
         if not raw:
             raise QNMRefuse(
                 "QNM-NO-FAN-AIRGAP",
-                "Plane C offline verify needs pack bytes; READY is not verified",
+                "Plane C needs operator offline-verify/attest; READY is not LIVE",
             )
         digest = sha256_hex(raw)
         expect = str(pack_tip or "").strip().lower()
@@ -206,6 +225,9 @@ class Planes:
         self._state["plane_c"]["status"] = "VERIFIED"
         self._state["plane_c"]["kind"] = "REAL"
         self._state["plane_c"]["live"] = False
+        self._state["plane_c"]["fan"] = False
+        self._state["plane_c"]["no_fan"] = True
+        self._state["plane_c"]["attest_required"] = True
         self._persist()
         return rec
 
@@ -218,5 +240,11 @@ class Planes:
     def refuse_invent_airgap(self, *_args: object, **_kwargs: object) -> None:
         raise QNMRefuse(
             "QNM-NO-FAN-AIRGAP",
-            "Plane C READY is not an offline-verify success",
+            "Plane C READY is not an offline-verify success; no FAN",
+        )
+
+    def refuse_plane_c_live(self, *_args: object, **_kwargs: object) -> None:
+        raise QNMRefuse(
+            "QNM-NO-FAN-AIRGAP",
+            "Plane C USB airgap is not LIVE without operator offline-verify/attest; no FAN",
         )

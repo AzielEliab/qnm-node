@@ -3,10 +3,10 @@
 Ingress → APG → tip/dwell/claim strangers → via walker → photon
 translate → outbox → cold-copy / phoenix / reheal / re-expand.
 
-Operator override (ALL-CHANNELS-ON): when fabric is enabled, RF,
-Bluetooth, Wi-Fi, and photon/QNS1 light are **armed ON**, plus
-lan/plc/operator/local. PHY without a real driver stays
-HOOK-PENDING — no invented live-link success.
+Operator override (ALL-CHANNELS-ON): when fabric is enabled, the
+software path allows RF, Bluetooth, Wi-Fi, and photon/QNS1 light,
+plus lan/plc/operator/local. That is not fielded radios. Soft PHY
+hooks stay **MOCK** — no invented live-link success.
 
 qnm-node never calls AZ Generator. Node Gate is a MirageGrid
 subsystem only (outward claim surface). GET /v1/mesh never enables
@@ -24,7 +24,13 @@ from typing import Any
 from qnm.bitmesh import refuse_public_geo
 from qnm.boot import AUTHOR, SPEC, QNMRefuse
 from qnm.wires import DWELL_CLOCK, DWELL_SOCKET, TICK_CLOCK, TICK_SOCKET
-from qnsd.vias import CHANNELS_ON, DECLARE_REQUIRED, PHYSICAL_HOOK, VIA_ORDER
+from qnsd.vias import (
+    CHANNELS_ON,
+    DECLARE_REQUIRED,
+    VIA_ORDER,
+    channel_honesty,
+    radios_stamp,
+)
 
 FABRIC_SPEC = "FABRIC-MESH-PIPELINE-1.0"
 ALWAYS_PRESENT = ("local", "qns", "operator")
@@ -100,7 +106,7 @@ _CLOCKS = {
 
 
 class Fabric:
-    """Local fabric law. Arms channels when enabled. Does not call MirageGrid."""
+    """Local fabric law. Channels-ON is a software path. Does not call MirageGrid."""
 
     def __init__(self, root: Path | None = None) -> None:
         self.enabled = False
@@ -142,9 +148,7 @@ class Fabric:
         )
 
     def status(self) -> dict[str, Any]:
-        phy: dict[str, str] = {}
-        for name in PHYSICAL_HOOK:
-            phy[name] = "HOOK-PENDING" if self.enabled else "mock"
+        honesty = channel_honesty(enabled=self.enabled)
         return {
             "ok": True,
             "spec": FABRIC_SPEC,
@@ -155,11 +159,7 @@ class Fabric:
             "via_order": list(VIA_ORDER),
             "declare_required": list(DECLARE_REQUIRED),
             "always_present": list(ALWAYS_PRESENT),
-            "channels_on": list(CHANNELS_ON) if self.enabled else [],
-            "all_channels_on": self.enabled,
-            "physical_vias": phy,
-            "photon": "REAL",
-            "radios": "armed" if self.enabled else "off",
+            **honesty,
             "remote_bearer": False,
             "bind": "127.0.0.1",
             "sticky_via": False,
@@ -169,12 +169,9 @@ class Fabric:
             "az_generator": False,
             "call_az_generator": False,
             "public_qnsd_proxy": False,
-            "live_rf_mesh": False,
-            "live_bt_link": False,
-            "live_wifi_link": False,
-            "live_flash": False,
             "public_hostname_restore": False,
             "bitmesh_geo": "internal-only",
+            "bitmesh_fielded": False,
             "public_receipt_geo": False,
             "clocks": {
                 "tick": TICK_CLOCK,
@@ -197,7 +194,7 @@ class Fabric:
         }
 
     def enable(self, node: Any | None = None) -> dict[str, Any]:
-        """Arm RF / BT / Wi-Fi / photon plus lan/plc/operator/local."""
+        """Allow the software channel path. Soft radios stay MOCK."""
         self.enabled = True
         if node is not None:
             self.root = Path(getattr(node, "root", self.root or Path.cwd()))
@@ -213,7 +210,9 @@ class Fabric:
                 {
                     "enabled": True,
                     "channels_on": list(CHANNELS_ON),
-                    "radios": "armed",
+                    "channels_on_means": "software path allowed; not fielded PHY",
+                    "radios": radios_stamp(True),
+                    "radios_status": "MOCK",
                     "live_rf_mesh": False,
                     "az_generator": False,
                 },
@@ -393,7 +392,9 @@ class Fabric:
             "claim_clock": CLAIM_CLOCK,
             "claim_is_stranger": True,
             "enabled": self.enabled,
-            "radios": "armed" if self.enabled else "off",
+            "radios": radios_stamp(self.enabled),
+            "radios_status": "MOCK",
+            "radios_fielded": False,
             "live_rf_mesh": False,
             "spec": FABRIC_SPEC,
             "author": AUTHOR,

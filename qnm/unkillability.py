@@ -2,14 +2,16 @@
 
 Architecture score (law + armed channels) is not the fielded score.
 
-Fielded band today is Cap-7 live + armed HOOK-PENDING hooks (~68–70)
-until Plane B has a real Zenodo DOI and Plane C has an offline-verify
-receipt. Architecture alone must not claim the fielded target or 100.
+Fielded band today is Cap-7 live + MOCK soft-radio hooks (~68–70)
+until Plane B has a real Zenodo DOI and Plane C has an operator
+offline-verify / attest receipt. Architecture alone must not claim
+the fielded target or 100.
 
 Hubs must not publish architecture_score / 100.
 
-This is **not** a live RF mesh claim. PHY without a driver stays
-HOOK-PENDING (MOCK). Photon codec stays REAL. Score never reads views.
+This is **not** a live RF mesh claim. Soft RF / BT / Wi-Fi / photon /
+bitmesh stay **MOCK** until real PHY is fielded. Photon codec stays
+REAL. Score never reads views.
 
 Author: Aziel Eliab only.
 """
@@ -21,7 +23,7 @@ from typing import Any
 from qnm.boot import AUTHOR, SPEC, QNMRefuse
 from qnm.coldcopy import DEVICE_CLASSES
 from qnm.planes import valid_zenodo_doi
-from qnsd.vias import CHANNELS_ON, PHYSICAL_HOOK
+from qnsd.vias import CHANNELS_ON, MOCK, physical_via_stamps
 
 UNKILL_SPEC = "UNKILLABILITY-1.1"
 TARGET = 80
@@ -42,13 +44,13 @@ _LAW_POINTS = (
     ("archive_reexpand", 6, "REAL", "bytes of the chain, not summaries"),
     ("self_reheal", 6, "REAL", "own last good tip or phoenix-WAIT"),
     ("public_receipt_no_geo", 4, "REAL", "public receipts stay no user/geo"),
-    ("honest_hooks", 6, "LAW", "HOOK-PENDING; no invented live PHY"),
+    ("honest_hooks", 6, "LAW", "MOCK; no invented live PHY"),
     ("mesh_never_enables", 2, "LAW", "GET /v1/mesh never enables suite radios"),
     ("no_az_generator", 2, "LAW", "AZ Generator is MirageGrid FRONT only"),
 )
 
 _FABRIC_POINTS = (
-    ("channels_armed", 12, "LAW", "RF/BT/Wi-Fi/photon armed ON (PHY may be MOCK)"),
+    ("channels_armed", 12, "LAW", "software path ON; not fielded radios (MOCK)"),
     ("photon_real", 6, "REAL", "QNS1 codec is real"),
 )
 
@@ -131,7 +133,7 @@ def compute_unkillability(
     fielded = min(MAX_SCORE, fielded)
     gates = bool(doi_ok and c_ok)
     meets = bool(gates and fielded >= TARGET)
-    phy = {name: "HOOK-PENDING" if fabric_enabled else "mock" for name in PHYSICAL_HOOK}
+    phy = physical_via_stamps()
     band = list(FIELDED_BAND) if not gates else [fielded, fielded]
     return {
         "ok": True,
@@ -163,9 +165,11 @@ def compute_unkillability(
         },
         "real_mock": {
             "photon": "REAL",
+            "photon_channel": MOCK,
             "cold_copy": "REAL",
             "persist_transfer": "REAL" if persist_devices else "READY",
-            "bitmesh_geo": "REAL-internal",
+            "bitmesh_geo": MOCK,
+            "bitmesh_channel": MOCK,
             "public_receipt_geo": False,
             "physical_vias": phy,
             "live_rf_mesh": False,
@@ -177,6 +181,9 @@ def compute_unkillability(
             "plane_c_offline_verify": "REAL" if c_ok else "READY",
         },
         "channels_on": list(CHANNELS_ON) if fabric_enabled else [],
+        "channels_on_means": "software path allowed; not fielded PHY",
+        "radios_fielded": False,
+        "radios_status": MOCK,
         "device_classes": list(DEVICE_CLASSES),
         "replicas": replica_n,
         "single_server_unkillable": replica_n >= 2,
