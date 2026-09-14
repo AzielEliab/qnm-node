@@ -326,6 +326,8 @@ class Fabric:
         if isinstance(raw, dict):
             op = str(raw.get("op") or raw.get("action") or "")
             if op == "enable":
+                if hasattr(node, "enable_fabric"):
+                    return node.enable_fabric()
                 return self.enable(node)
             self.refuse_payload(raw)
             body = json.dumps(raw, sort_keys=True, separators=(",", ":")).encode("utf-8")

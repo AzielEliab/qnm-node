@@ -47,6 +47,7 @@ from qnm.chain import Chain
 from qnm.bitmesh import Bitmesh, refuse_public_geo
 from qnm.coldcopy import DEVICE_CLASSES, ColdCopy
 from qnm.fabric import CLAIM_CLOCK, FABRIC_SPEC, Fabric
+from qnm.unkillability import compute_unkillability
 from qnm.memorial import Memorial
 from qnm.nolie import NoLie, receipt_digest
 from qnm.outbox import Outbox
@@ -108,6 +109,7 @@ LOCAL_PATHS = {
     "/local/fabric",
     "/local/persist",
     "/local/bitmesh",
+    "/local/unkillability",
 }
 
 MESH_NEVER_ENABLE = frozenset(
@@ -292,6 +294,7 @@ class Node:
             "copies_one_tunnel": False,
             "fabric": self.fabric.status(),
             "bitmesh": self.bitmesh.status(),
+            "unkillability": self.unkillability(),
             "node_gate": False,
             "az_generator": False,
             "call_az_generator": False,
@@ -933,7 +936,34 @@ class Node:
 
     def enable_fabric(self) -> dict[str, Any]:
         self._require_not_scorched()
-        return self.fabric.enable(self)
+        snap = self.fabric.enable(self)
+        if self.chain.path.is_file():
+            stored = self.vault.store(self.chain.path.read_bytes(), host="local")
+            persist = self.persist_transfer({"tip": stored["tip"]})
+            snap["persist"] = {
+                "tip": persist["tip"],
+                "devices": list(persist["devices"]),
+                "erased": False,
+            }
+        snap["unkillability"] = self.unkillability()
+        return snap
+
+    def unkillability(self, extra: dict[str, Any] | None = None) -> dict[str, Any]:
+        """Pissed-off-gov erasure cost. Target 80+. Not a live PHY claim."""
+        if extra and "views" in extra:
+            raise QNMRefuse("QNM-SCORE-NO-VIEWS", "unkillability never reads views")
+        hosts = {str(row.get("host") or "") for row in self.vault.replicas()}
+        persist = bool(hosts & set(DEVICE_CLASSES)) or self.fabric.enabled
+        replica_n = len(hosts)
+        if self.chain.tip:
+            replica_n = max(replica_n, self.vault.replica_count(self.chain.tip))
+        return compute_unkillability(
+            fabric_enabled=self.fabric.enabled,
+            persist_devices=persist,
+            replica_n=replica_n,
+            bitmesh_binds=len(self.bitmesh.list()),
+            views=extra.get("views") if extra else None,
+        )
 
     def _seat_verified_tip(self, *, append_boot: bool) -> None:
         _ = append_boot
@@ -1258,6 +1288,8 @@ class Node:
         if route == "/local/bitmesh" and method == "POST":
             payload = json.loads(body.decode("utf-8") or "{}") if body else {}
             return self.bind_bitmesh(payload)
+        if route == "/local/unkillability" and method == "GET":
+            return self.unkillability()
         raise QNMRefuse("QNM-LOOPBACK-ONLY", f"{method} {route}")
 
 

@@ -12,7 +12,8 @@ import pytest
 from qnm.bitmesh import geohash, public_receipt_has_geo, refuse_public_geo
 from qnm.boot import QNMRefuse
 from qnm.coldcopy import DEVICE_CLASSES
-from qnm.fabric import CHANNELS_ON, FABRIC_SPEC, Fabric
+from qnm.fabric import CHANNELS_ON, FABRIC_SPEC
+from qnm.unkillability import TARGET, compute_unkillability
 from qnm.node import Node
 from qnsd.boot import QNSRefuse
 from qnsd.node import Node as QnsdNode
@@ -58,6 +59,15 @@ def test_fabric_enable_arms_rf_bt_wifi_photon(tmp_path: Path) -> None:
     assert code == 200
     assert status["enabled"] is True
     assert status["call_az_generator"] is False
+    kill = node.unkillability()
+    assert kill["score"] >= TARGET
+    assert kill["meets_target"] is True
+    assert kill["label"] == "pissed-off-gov"
+    assert kill["real_mock"]["photon"] == "REAL"
+    assert kill["real_mock"]["live_rf_mesh"] is False
+    for name in ("bt", "rf", "wifi", "light"):
+        assert kill["real_mock"]["physical_vias"][name] == "HOOK-PENDING"
+    assert armed["unkillability"]["score"] >= TARGET
 
 
 def test_phy_emit_is_hook_pending_not_live_success(tmp_path: Path) -> None:
@@ -153,6 +163,41 @@ def test_mesh_get_never_enables_and_no_az_generator(tmp_path: Path) -> None:
     assert "invoke_az_generator(" not in Path(__file__).resolve().parents[1].joinpath(
         "qnm", "fabric.py"
     ).read_text(encoding="utf-8")
+
+
+def test_pissed_off_gov_unkillability_reaches_80(tmp_path: Path) -> None:
+    node = _boot(tmp_path)
+    cold = node.unkillability()
+    assert cold["views_read"] is False
+    assert cold["az_generator"] is False
+    assert cold["live_rf_mesh"] is False
+    assert cold["real_mock"]["live_rf_mesh"] is False
+    armed = node.enable_fabric()
+    kill = armed["unkillability"]
+    assert kill["score"] >= 80
+    assert kill["score"] >= TARGET
+    kinds = {row["name"]: row["kind"] for row in kill["factors"]}
+    assert kinds["photon_real"] == "REAL"
+    assert kinds["channels_armed"] == "LAW"
+    assert kinds["honest_hooks"] == "LAW"
+    assert kill["real_mock"]["physical_vias"]["rf"] == "HOOK-PENDING"
+    with pytest.raises(QNMRefuse) as vxc:
+        node.unkillability({"views": 99})
+    assert vxc.value.code == "QNM-SCORE-NO-VIEWS"
+    with pytest.raises(QNMRefuse) as pxc:
+        compute_unkillability(
+            fabric_enabled=True,
+            persist_devices=True,
+            replica_n=6,
+            bitmesh_binds=1,
+            live_rf_mesh=True,
+        )
+    assert pxc.value.code == "QNS-HOOK-PENDING"
+    code, api = node.handle("GET", "/local/unkillability", b"")
+    assert code == 200
+    assert api["score"] >= 80
+    assert api["call_az_generator"] is False
+    assert node.snapshot()["unkillability"]["score"] >= 80
 
 
 def test_unarmed_radio_still_refuses_until_fabric(tmp_path: Path) -> None:

@@ -166,6 +166,7 @@ Local API binds **127.0.0.1:8891** only:
 | `GET/POST /local/fabric` | Pipeline status / enable (arms channels) / one local pass (never calls AZ Generator) |
 | `POST /local/persist` | Multi-device vault-on-transfer (laptop / phone / watch / radio / bluetooth) |
 | `GET/POST /local/bitmesh` | Internal geohash bind (not public ACT-RECEIPT geo) |
+| `GET /local/unkillability` | Pissed-off-gov erasure cost (target 80+; REAL/MOCK labeled; not a live PHY claim) |
 
 `qnsd` adds `POST /local/policy` and `POST /local/declare` on the same
 loopback bind (port from `cfg/node.json`, default 8891).

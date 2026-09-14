@@ -166,6 +166,11 @@ erase the tip.
 **Bitmesh geo (internal).** Geohash binds to tip on the internal
 bitmesh plane for routing only. Public receipts stay no user / geo.
 
+**Pissed-off-gov unkillability.** Target **80+** when fabric is
+armed. Score is copy-cost + law + armed channels. REAL vs MOCK is
+labeled. PHY hooks stay HOOK-PENDING. This is not a live RF mesh
+claim. `GET /local/unkillability`.
+
 Restriction walks the next class inside the same call. `force_via`
 restricted ⇒ wait. No silent remap. Packet id does not change.
 Sticky-via is banned (`QNS-STICKY-VIA`).

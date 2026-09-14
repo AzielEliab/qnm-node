@@ -313,6 +313,7 @@ class ColdCopy:
             "replicas": n,
             "required": self.replica_n,
             "single_server_unkillable": n >= 2,
+            "public_pull_unkillable": True,
             "spec": COLD_SPEC,
             "author": AUTHOR,
         }
