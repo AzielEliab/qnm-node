@@ -1,26 +1,25 @@
-"""RF via — ABSENT without a declared profile unless fabric-armed.
+"""RF via — cellular LTE/5G via ModemManager (`mmcli`).
 
-Device hook is MOCK until a fielded PHY binds. No invented live RF mesh.
+LIVE when a modem+SIM is present. ABSENT otherwise. Emit without a
+modem is RADIO-NO-MODEM. Fabric enable does not invent a tower.
 """
 
 from __future__ import annotations
 
-from qnsd.vias.base import ABSENT, MOCK, PRESENT, BaseAdapter, ViaContext
+from qnsd.vias.base import ABSENT, PRESENT, BaseAdapter, ViaContext, os_phy_emit
 
 
 class RfAdapter(BaseAdapter):
     name = "rf"
-    mock = True
-    device_hook = MOCK
+    mock = False
+    device_hook = "os"
     protocol = "ViaAdapter"
 
     def presence(self, ctx: ViaContext) -> str:
-        if ctx.fabric_armed:
-            return PRESENT
-        rec = ctx.declared_via("rf")
-        if rec.get("profile"):
-            return PRESENT
-        return ABSENT
+        return PRESENT if ctx.phy("rf").get("live") else ABSENT
+
+    def emit(self, photon, ctx: ViaContext):
+        return os_phy_emit(self.name, photon, ctx)
 
 
 ADAPTER = RfAdapter()

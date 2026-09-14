@@ -39,7 +39,7 @@ from qnm.spiderweb import Spiderweb
 from qnm.nolie import NoLie
 from qnm.wires import Wires
 
-__version__ = "1.4.0"
+__version__ = "1.5.0"
 __author__ = "Aziel Eliab"
 __spec__ = "QNM-BUILD-1.0"
 __companion__ = "AIH-WP-1.3"

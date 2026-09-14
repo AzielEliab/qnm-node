@@ -16,7 +16,8 @@ Companion to `QNM-BUILD-1.0.md` and `AIH-WP-1.3.md`.
 | [CROSS-NETWORK-SURVIVAL-1.0](./CROSS-NETWORK-SURVIVAL-1.0.md) | If network + live data die, chain survives (cold copy / re-expand / self-reheal) |
 | [NO-LIE-1.0](./NO-LIE-1.0.md) | Network never lies, even to stay alive / adapt / prevent death; receipts still hash; verify without voice |
 | [NO-REWRITE-1.0](./NO-REWRITE-1.0.md) | No rewrite key; published tip immutable; copies not all on one tunnel |
-| [FABRIC-MESH-PIPELINE-1.0](./FABRIC-MESH-PIPELINE-1.0.md) | Local ingress → APG → stranger clocks → via walker → photon → outbox → survival; ALL-CHANNELS-ON when fabric-enabled; internal bitmesh geo; unkillability architecture ≠ fielded (hubs must not publish 100); MirageGrid Node Gate is an external claim stranger |
+| [FABRIC-MESH-PIPELINE-1.0](./FABRIC-MESH-PIPELINE-1.0.md) | Local ingress → APG → stranger clocks → via walker → photon → outbox → survival; ALL-CHANNELS-ON; OS radios LIVE\|ABSENT\|REFUSED (supersedes MOCK stamps); hash-verified Codeberg/archive/GitFlic shelves (Zenodo not required); unkillability architecture ≠ fielded (hubs must not publish 100); MirageGrid Node Gate is an external claim stranger |
+| [RADIO-PHY-1.0](./RADIO-PHY-1.0.md) | Cellular ModemManager, Wi-Fi+BT NM/BlueZ, GNSS gpsd, NFC libnfc/PCSC — LIVE\|ABSENT\|REFUSED; no mock chatter |
 
 QNM-WP-1.0 absorbs BUILD+TOPO: local process ON, public rollup OFF and
 dies with the pull; GET /v1/mesh never enables. Phoenix is wait /
@@ -34,6 +35,7 @@ FABRIC-MESH-PIPELINE-1.0 locks the local order (APG → wires → vias →
 photon → outbox → phoenix / reheal / cold-copy). MirageGrid claim
 clock is an external stranger to qnm tip and dwell clocks. When
 fabric-enabled, RF / BT / Wi-Fi / photon software paths may be ON.
-Physical Bluetooth / RF / Wi-Fi / photon / camera / bitmesh stay
-**MOCK** until a fielded PHY exists. Public receipts stay no user/geo.
-Plane C USB airgap requires operator offline-verify/attest before LIVE.
+Cellular / Wi-Fi / BT / GNSS / NFC stamp **LIVE | ABSENT | REFUSED**
+from real OS probes. Camera/emitter stays HOOK-PENDING. Public
+receipts stay no user/geo. Plane C USB airgap requires operator
+offline-verify/attest before LIVE.

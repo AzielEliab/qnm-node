@@ -1,27 +1,24 @@
-"""Wi-Fi via — software path may be ON. Device hook is MOCK until a PHY binds.
+"""Wi-Fi via — NetworkManager / `iw` / sysfs wireless.
 
-Protocol-complete ViaAdapter. No invented 802.11 success. Channels-ON
-is not a fielded radio.
+LIVE when an 802.11 adapter is present. No invented association.
 """
 
 from __future__ import annotations
 
-from qnsd.vias.base import ABSENT, MOCK, PRESENT, BaseAdapter, ViaContext
+from qnsd.vias.base import ABSENT, PRESENT, BaseAdapter, ViaContext, os_phy_emit
 
 
 class WifiAdapter(BaseAdapter):
     name = "wifi"
-    mock = True
-    device_hook = MOCK
+    mock = False
+    device_hook = "os"
     protocol = "ViaAdapter"
 
     def presence(self, ctx: ViaContext) -> str:
-        if ctx.fabric_armed:
-            return PRESENT
-        rec = ctx.declared_via("wifi")
-        if rec.get("link") or rec.get("ssid") or rec:
-            return PRESENT
-        return ABSENT
+        return PRESENT if ctx.phy("wifi").get("live") else ABSENT
+
+    def emit(self, photon, ctx: ViaContext):
+        return os_phy_emit(self.name, photon, ctx)
 
 
 ADAPTER = WifiAdapter()

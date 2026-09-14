@@ -145,45 +145,50 @@ that gate. It does not mean the gate is called and answered “no.”
 ## Vias (walker order)
 
 ```
-VIA_ORDER = lan, wifi, plc, bt, rf, light, qns, operator, local
+VIA_ORDER = lan, wifi, plc, bt, rf, gps, nfc, light, qns, operator, local
 ```
 
-Fabric enable allows the software path for **all** of these. That is
-not fielded radios. Unarmed rf / plc / light / wifi still need
-declare.
+Fabric enable allows the software path. OS radios do **not** become
+PRESENT from fabric alone. Missing hardware is ABSENT; emit is REFUSED.
 
 | Class | Presence | Device |
 | --- | --- | --- |
-| `local`, `qns`, `operator` | always PRESENT (software) | REAL software |
-| `lan` | PRESENT (software). Emit fails without a declared link. | REAL software |
+| `local`, `qns`, `operator` | always PRESENT (software) | **REAL** |
+| `lan` | PRESENT (software). Emit fails without a declared link. | **REAL** software when declared/armed |
 | `plc` | ABSENT without declared `domain` unless fabric-armed | software declare; no invented PLC PHY |
-| `wifi` | ABSENT without declare unless fabric-armed | **MOCK** until fielded PHY |
-| `bt` | PRESENT (software Protocol) | **MOCK** until fielded PHY |
-| `rf` | ABSENT without declared `profile` unless fabric-armed | **MOCK** until fielded PHY |
-| `light` | ABSENT without declare unless fabric-armed. Camera deny is PERM (walk next). | QNS1 codec **REAL**; camera / emitter / photon channel **MOCK** |
+| `wifi` | PRESENT only when an 802.11 adapter is LIVE | NetworkManager / `iw` — **LIVE** or **ABSENT** |
+| `bt` | PRESENT only when a BlueZ adapter is LIVE | BlueZ — **LIVE** or **ABSENT** |
+| `rf` | PRESENT only when ModemManager sees modem+SIM | `mmcli` — **LIVE** or **ABSENT** (`RADIO-NO-MODEM`) |
+| `gps` | PRESENT only when gpsd reports a 2D/3D fix | receive-only — TX is `RADIO-GNSS-RX-ONLY` |
+| `nfc` | PRESENT only when libnfc/PCSC sees a reader | **LIVE** or **ABSENT** (`RADIO-NO-NFC`) |
+| `light` | ABSENT without declare unless fabric-armed. Camera deny is PERM. | QNS1 codec **REAL**; camera / emitter **HOOK-PENDING** |
 
 **Persist / transfer.** Cold-copy / vault-on-transfer / outbox places
 the tip on named device classes: laptop, phone, apple-watch,
-phone-watch, radio, bluetooth. A pull or offline hop does **not**
-erase the tip.
+phone-watch, radio, bluetooth. That is a **local named-host vault**.
+Radio / bluetooth PHY path is **LIVE** or **ABSENT** from OS probes.
+A pull or offline hop does **not** erase the tip.
 
 **Bitmesh geo (internal).** Geohash binds to tip on the internal
-bitmesh plane for routing only. The bitmesh **channel** is **MOCK**
-(not fielded RF). Public receipts stay no user / geo.
+bitmesh plane for routing only. GNSS must be LIVE (`RADIO-NO-GNSS`
+without a receiver). Public receipts stay no user / geo.
 
 **Pissed-off-gov unkillability.** Architecture ≠ fielded.
 `architecture_score` may be high (law + software Channels-ON + persist).
 `fielded_score` / `score` is the hub-safe number. Fielded band today
-is **68–70** (Cap-7 live + MOCK soft radios) until Plane B has a
-real Zenodo DOI **and** Plane C has an operator offline-verify /
-attest receipt. `meets_target` is true only when those fielded gates
-pass. Hubs must **not** publish `architecture_score` or 100. Plane A
-hubs are LIVE on the **same CF tunnel** — not four independent copies.
-Plane B DOI is null (SLOT) until seated. Plane C USB airgap is READY,
-not LIVE, until the operator offline-verifies / attests. No FAN. Do
-not invent a DOI or airgap success. `GET /local/unkillability`. Soft
-RF / BT / Wi-Fi / photon / bitmesh stay **MOCK**. This is not a live
-RF mesh claim.
+is **68–70** (Cap-7 live + OS PHY ABSENT/LIVE facts) until Plane B has
+a **hash-verified** Codeberg / archive.org / GitFlic shelf **and**
+Plane C has an operator offline-verify / attest receipt. Zenodo is
+IP-banned and is **not required**. A format-only DOI does not open
+the gate. `meets_target` is true only when those fielded gates pass.
+Hubs must **not** publish `architecture_score` or 100. Plane A hubs
+are LIVE on the **same CF tunnel** — not four independent copies.
+Plane B is SLOT until hash-verified. Plane C USB pack is READY, not
+LIVE, until the operator attests. No FAN. Do not invent a DOI or
+airgap success. `GET /local/unkillability`. `GET /local/channels`
+and `GET /local/phy` stamp LIVE | ABSENT | REFUSED. This is not a
+live RF mesh claim. Plane C attest-before-LIVE. Lamb Lens:
+Service → Clarity → Peace. No hub chrome.
 
 Restriction walks the next class inside the same call. `force_via`
 restricted ⇒ wait. No silent remap. Packet id does not change.

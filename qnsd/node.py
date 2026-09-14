@@ -45,7 +45,7 @@ from qnsd.receipts import Receipts
 from qnsd.sanitize import sanitize_photon
 from qnsd.translate import apply as translate_apply
 from qnsd.vias import ADAPTERS, VIA_ORDER
-from qnsd.vias.base import ViaContext
+from qnsd.vias.base import ViaContext, audit_channels
 from qnsd.walker import ViaStack
 
 STATES = (
@@ -117,18 +117,21 @@ class Node:
         self._load_fabric()
 
     def ctx(self) -> ViaContext:
+        from qnsd.phy import env_runner
+
         return ViaContext(
             state=self.state,
             declared=dict(self.declared),
             camera_deny=self.camera_deny,
             lan_link=self.lan_link,
             fabric_armed=self.fabric_armed,
+            phy_runner=env_runner(),
         )
 
     def arm_fabric(self) -> dict[str, Any]:
-        """Allow RF / BT / Wi-Fi / photon software paths. Soft radios stay MOCK."""
+        """Allow software paths. OS PHYs stay LIVE|ABSENT from host probes."""
         self.fabric_armed = True
-        for name in ("rf", "bt", "wifi", "light", "lan", "plc"):
+        for name in ("rf", "bt", "wifi", "gps", "nfc", "light", "lan", "plc"):
             rec = dict(self.declared.get(name) or {})
             rec["via"] = name
             rec.setdefault("armed", True)
@@ -153,9 +156,9 @@ class Node:
             "armed": True,
             "fabric_armed": True,
             "radios": "software-on",
-            "radios_status": "MOCK",
+            "radios_status": "ABSENT",
             "radios_fielded": False,
-            "channels_on_means": "software path allowed; not fielded PHY",
+            "channels_on_means": "software path allowed; OS PHYs LIVE|ABSENT|REFUSED",
             "live_rf_mesh": False,
             "presence": {name: self.stack.adapters[name].presence(self.ctx()) for name in VIA_ORDER},
             "spec": SPEC,
@@ -213,12 +216,13 @@ class Node:
             "parents": list(PARENTS),
             "via_order": list(VIA_ORDER),
             "presence": presences,
+            "channels": audit_channels(self.ctx()),
             "declared": dict(self.declared),
             "policy": self.policy.snapshot(),
             "radios": "software-on" if self.fabric_armed else "off",
             "radios_fielded": False,
-            "radios_status": "MOCK",
-            "channels_on_means": "software path allowed; not fielded PHY",
+            "radios_status": "ABSENT",
+            "channels_on_means": "software path allowed; OS PHYs LIVE|ABSENT|REFUSED",
             "fabric_armed": self.fabric_armed,
             "live_rf_mesh": False,
             "sticky_via": False,

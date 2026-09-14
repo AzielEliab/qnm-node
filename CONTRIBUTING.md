@@ -19,9 +19,10 @@ Python 3.10+. Core is stdlib only. pytest is the dev extra. No network.
 ## Ground rules (QNM-BUILD-1.0 + AIH-WP-1.3 + QNS-CD-1.0)
 
 1. **Identity is Aziel Eliab only.**
-2. Radios stay off until fabric enable; then the software path is ON
-   and soft radios stay MOCK (not fielded PHY, not invented live
-   radio). Local API binds 127.0.0.1 only. GET /v1/mesh never enables.
+2. Radios stay off until fabric enable; then the software path is ON.
+   OS PHYs (cellular/mmcli, Wi-Fi/NM, BlueZ, gpsd, libnfc/PCSC) stamp
+   LIVE | ABSENT | REFUSED — never mock chatter. Local API binds
+   127.0.0.1 only. GET /v1/mesh never enables.
 3. Receipts go to disk. Chain is append-only.
 4. Poison is refused, not interpreted (APG).
 5. Tamper isolates. No auto-heal.
@@ -48,11 +49,14 @@ Python 3.10+. Core is stdlib only. pytest is the dev extra. No network.
     adapt, or prevent death. There is no rewrite key.
 17. Fabric pipeline stays local. Do not add a call-AZ-Generator path.
     Node Gate is MirageGrid only (outward claim stranger). Fabric
-    enable allows RF / BT / Wi-Fi / photon software paths; soft radios
-    stay MOCK. Plane C USB airgap needs operator offline-verify/attest
-    before LIVE. No FAN.
-    Public receipts stay no user/geo. No public hostname restore. No
-    public qnsd proxy. Via payloads sanitize-refuse.
+    enable allows software paths. Cellular / Wi-Fi / BT / GNSS / NFC
+    are LIVE OS bindings or ABSENT/REFUSED — no MOCK chatter.
+    GET /v1/mesh never enables radios. Plane B does not require a
+    Zenodo DOI; hash-verified Codeberg / archive.org / GitFlic shelves
+    count. Plane C USB airgap needs operator offline-verify/attest
+    before fielded LIVE. Public receipts stay no user/geo. No public
+    hostname restore. No public qnsd proxy. Via payloads
+    sanitize-refuse. No hub chrome.
 
 ## License of contributions
 
