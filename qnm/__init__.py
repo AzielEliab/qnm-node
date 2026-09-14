@@ -38,8 +38,11 @@ from qnm.unkillability import FIELDED_BAND, UNKILL_SPEC, compute_unkillability
 from qnm.spiderweb import Spiderweb
 from qnm.nolie import NoLie
 from qnm.wires import Wires
+from qnm.surface import SURFACE_SPEC, attack_surface_map, redline_checklist
+from qnm.fold import FOLD_SPEC, fold_sensitive, foldlock_cite
+from qnm.shelf import SHELF_SPEC, encrypt_pack, export_tip
 
-__version__ = "1.5.0"
+__version__ = "1.6.0"
 __author__ = "Aziel Eliab"
 __spec__ = "QNM-BUILD-1.0"
 __companion__ = "AIH-WP-1.3"

@@ -7,7 +7,7 @@ with **[AIH-WP-1.3](docs/AIH-WP-1.3.md)** Spiderweb Pair-Bind
 remains **AIH-WP-1.1**.
 
 **Author:** Aziel Eliab only
-**Date:** September 2026 · v1.5.0
+**Date:** September 2026 · v1.6.0
 **License:** [Apache-2.0](LICENSE)
 **Spec:** QNM-BUILD-1.0 · AIH-WP-1.3 · QNS-CD-1.0 · FABRIC-MESH-PIPELINE-1.0
 
@@ -134,8 +134,13 @@ python -m qnm doctor
 python -m qnm boot
 python -m qnm serve
 python -m qnsd doctor
-python -m qnsd serve
 ```
+
+`python -m qnm serve` is the **one local door** (127.0.0.1:8891).
+`python -m qnsd serve` is an extra operator door and needs
+`--operator-extra-door` (still loopback-only). See
+[docs/ATTACK-SURFACE-1.0.md](docs/ATTACK-SURFACE-1.0.md) and
+[docs/REDLINE-1.0.md](docs/REDLINE-1.0.md).
 
 Local API binds **127.0.0.1:8891** only:
 
@@ -172,9 +177,14 @@ Local API binds **127.0.0.1:8891** only:
 | `GET/POST /local/bitmesh` | Internal geohash bind (LIVE GNSS or `RADIO-NO-GNSS`; not public ACT-RECEIPT geo) |
 | `GET /local/unkillability` | Architecture vs fielded erasure cost. `score` = fielded (68–70 until hash-verified Plane B shelf + Plane C attest). Zenodo is not required. Hubs must not publish architecture 100. |
 | `GET/POST /local/planes` | Plane A/B/C facts. Hash-verified Codeberg/archive/GitFlic shelves count. Plane C attest-before-LIVE. Refuse invented DOI or airgap success. |
+| `GET /local/surface` | Attack-surface map: listens, local vs public, radio/mesh enable paths |
+| `GET /local/redline` | REDLINE-1.0 checklist |
+| `POST /local/shelf` | Operator-key cold-shelf wrap / signed restore (no invented key) |
+| `POST /local/export` | Fold + export; non-local plaintext refuses without operator flag + TLS |
 
-`qnsd` adds `POST /local/policy` and `POST /local/declare` on the same
-loopback bind (port from `cfg/node.json`, default 8891).
+`qnsd` engine paths (`POST /local/policy`, `POST /local/declare`) stay
+on the qnm door. A second `qnsd` HTTP listen needs
+`--operator-extra-door` and is still 127.0.0.1-only.
 
 ## QNS-CD-1.0 (local qnsd)
 
@@ -198,9 +208,9 @@ OS radios implement `ViaAdapter` against real host tools. Photon
 qnm/                 boot, node, chain, apg, bearers, outbox,
                      phoenix, score, memorial, tethers,
                      pairs, spiderweb, wires, coldcopy, archive,
-                     nolie, fabric, bitmesh
+                     nolie, fabric, bitmesh, surface, shelf, fold
 qnsd/                QNS-CD-1.0 daemon: photon, walker, vias, light,
-                     azpipe, policy, sanitize, api (127.0.0.1)
+                     azpipe, policy, sanitize, api (127.0.0.1 extra-door)
 modules/anon-broadcast/   loopback-only style tool (never a publish path)
 cfg/node.json
 data/{chain,locks,outbox,receipts,witness,vault,archive,bitmesh}
@@ -231,6 +241,8 @@ key, published-tip immutable, no one-tunnel copies, no lie-to-live
 heal, fabric pipeline (three-clock strangers; no AZ Generator call),
 and attack-surface (remote off, radio refuse, loopback, APG
 size/marker, forbidden live symbols, no public qnsd proxy).
+REDLINE sims: mesh GET, fake LIVE radio, invented Plane B URL,
+unsigned tip restore, neighbor vote-to-fix.
 
 ## Cite
 
@@ -250,6 +262,10 @@ https://github.com/AzielEliab/qnm-node
 
 Eliab, Aziel. (2026). FABRIC-MESH-PIPELINE-1.0 local fabric mesh
 pipeline [Law]. Companion: QNM-BUILD-1.0 · QNS-CD-1.0. Apache-2.0.
+https://github.com/AzielEliab/qnm-node
+
+Eliab, Aziel. (2026). REDLINE-1.0 / ATTACK-SURFACE-1.0 [Law].
+Companion: QNM-BUILD-1.0 · RADIO-PHY-1.0. Apache-2.0.
 https://github.com/AzielEliab/qnm-node
 
 Do not invent a DOI.

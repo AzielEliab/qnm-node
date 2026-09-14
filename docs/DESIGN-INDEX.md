@@ -18,6 +18,8 @@ Companion to `QNM-BUILD-1.0.md` and `AIH-WP-1.3.md`.
 | [NO-REWRITE-1.0](./NO-REWRITE-1.0.md) | No rewrite key; published tip immutable; copies not all on one tunnel |
 | [FABRIC-MESH-PIPELINE-1.0](./FABRIC-MESH-PIPELINE-1.0.md) | Local ingress → APG → stranger clocks → via walker → photon → outbox → survival; ALL-CHANNELS-ON; OS radios LIVE\|ABSENT\|REFUSED (supersedes MOCK stamps); hash-verified Codeberg/archive/GitFlic shelves (Zenodo not required); unkillability architecture ≠ fielded (hubs must not publish 100); MirageGrid Node Gate is an external claim stranger |
 | [RADIO-PHY-1.0](./RADIO-PHY-1.0.md) | Cellular ModemManager, Wi-Fi+BT NM/BlueZ, GNSS gpsd, NFC libnfc/PCSC — LIVE\|ABSENT\|REFUSED; no mock chatter |
+| [ATTACK-SURFACE-1.0](./ATTACK-SURFACE-1.0.md) | Listen map; qnm is THE local door; WAN refused; qnsd HTTP is extra-door |
+| [REDLINE-1.0](./REDLINE-1.0.md) | Auth / token-never-in-git / mesh GET never enables / AZ Generator not callable / radio LIVE only on presence / poison refuse / no rewrite |
 
 QNM-WP-1.0 absorbs BUILD+TOPO: local process ON, public rollup OFF and
 dies with the pull; GET /v1/mesh never enables. Phoenix is wait /
