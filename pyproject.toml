@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "qnm-node"
-version = "1.2.0"
-description = "QNM-BUILD-1.0 + AIH-WP-1.3 + QNS-CD-1.0 Quantum Node Mesh local node and qnsd signal daemon (photon, vias, APG, AZPIPE). Author: Aziel Eliab."
+version = "1.3.0"
+description = "QNM-BUILD-1.0 + AIH-WP-1.3 + QNS-CD-1.0 + FABRIC-MESH-PIPELINE-1.0 Quantum Node Mesh local node and qnsd signal daemon (photon, vias, APG, AZPIPE). Author: Aziel Eliab."
 readme = "README.md"
 license = {file = "LICENSE"}
 authors = [{name = "Aziel Eliab"}]

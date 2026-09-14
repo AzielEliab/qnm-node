@@ -44,6 +44,10 @@ Python 3.10+. Core is stdlib only. pytest is the dev extra. No network.
 16. No lie. No rewrite. Receipts still hash. Verify without voice.
     Copies not all on one tunnel. Network never lies to stay alive,
     adapt, or prevent death. There is no rewrite key.
+17. Fabric pipeline stays local. Do not add a call-AZ-Generator path.
+    Node Gate is MirageGrid only (outward claim stranger). Radios
+    mock / default-off. No public hostname restore. No public qnsd
+    proxy. Via payloads sanitize-refuse.
 
 ## License of contributions
 

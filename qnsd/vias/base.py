@@ -78,6 +78,8 @@ class BaseAdapter:
     """Shared helpers. Concrete vias override presence/emit as needed."""
 
     name = "base"
+    mock = False
+    device_hook = "none"
 
     def presence(self, ctx: ViaContext) -> str:
         if self.name in ALWAYS_PRESENT:

@@ -45,6 +45,7 @@ from qnm.boot import (
 from qnm.archive import ChainArchive
 from qnm.chain import Chain
 from qnm.coldcopy import ColdCopy
+from qnm.fabric import CLAIM_CLOCK, FABRIC_SPEC, Fabric
 from qnm.memorial import Memorial
 from qnm.nolie import NoLie, receipt_digest
 from qnm.outbox import Outbox
@@ -103,7 +104,17 @@ LOCAL_PATHS = {
     "/local/survive",
     "/local/nolie",
     "/local/rewrite",
+    "/local/fabric",
 }
+
+MESH_NEVER_ENABLE = frozenset(
+    {
+        "/v1/mesh",
+        "/mesh",
+        "/v1/mesh/enable",
+        "/mesh/enable",
+    }
+)
 
 
 def ensure_data_dirs(root: Path) -> None:
@@ -163,6 +174,7 @@ class Node:
         self.vault = ColdCopy(self.root, replica_n=int(self.cfg.get("cold_copy_n") or 3))
         self.archive = ChainArchive(self.root)
         self.nolie = NoLie(self.root)
+        self.fabric = Fabric()
         self.memorial = Memorial(self.root)
         self.pairs = Pairs(self.memorial)
         self.spiderweb: Spiderweb | None = None
@@ -262,6 +274,15 @@ class Node:
             "rewrite_key": False,
             "verify_without_voice": True,
             "copies_one_tunnel": False,
+            "fabric": self.fabric.status(),
+            "node_gate": False,
+            "az_generator": False,
+            "call_az_generator": False,
+            "mesh_enable": False,
+            "softwares_tab": False,
+            "public_qnsd_proxy": False,
+            "claim_clock": CLAIM_CLOCK,
+            "claim_is_stranger": True,
             "published": self.nolie.published(),
             "tethers": self.tethers.list(),
             "pairs": self.pairs.list(),
@@ -611,6 +632,7 @@ class Node:
     def ingress(self, raw: bytes | str) -> dict[str, Any]:
         self._require_not_scorched()
         payload = self.apg.admit(raw)
+        self.fabric.refuse_payload(payload)
         op = str(payload.get("op") or "note")
         if op == "tamper":
             return self.isolate(str(payload.get("reason") or "ingress"))
@@ -991,6 +1013,11 @@ class Node:
     def handle(self, method: str, path: str, body: bytes = b"") -> tuple[int, dict[str, Any]]:
         parsed = urlparse(path)
         route = parsed.path.rstrip("/") or "/"
+        if route in MESH_NEVER_ENABLE:
+            return 403, QNMRefuse(
+                "QNM-MESH-NEVER-ENABLES",
+                "GET /v1/mesh never enables",
+            ).as_dict()
         if route == "/local/outbox/cut":
             route = "/local/outbox/cut"
         elif route != "/local/outbox" and route.startswith("/local/"):
@@ -1122,6 +1149,10 @@ class Node:
                 str(payload.get("tip") or ""),
                 str(payload.get("new_tip") or payload.get("replace_tip") or ""),
             )
+        if route == "/local/fabric" and method == "GET":
+            return self.fabric.status()
+        if route == "/local/fabric" and method == "POST":
+            return self.fabric.run(self, body or b"{}")
         raise QNMRefuse("QNM-LOOPBACK-ONLY", f"{method} {route}")
 
 
@@ -1209,6 +1240,10 @@ def main(argv: list[str] | None = None) -> int:
                 "bell_pair": False,
                 "qubit": False,
                 "forbidden_live_symbols": ["Lumen", "Mandible", "lattice_online", "mesh_complete"],
+                "fabric": FABRIC_SPEC,
+                "node_gate": False,
+                "az_generator": False,
+                "mesh_enable": False,
             }
             print(json.dumps(report, indent=2, sort_keys=True))
             return 0

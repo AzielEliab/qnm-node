@@ -7,6 +7,8 @@ from qnsd.vias.base import ABSENT, PRESENT, BaseAdapter, ViaContext
 
 class RfAdapter(BaseAdapter):
     name = "rf"
+    mock = True
+    device_hook = "mock"
 
     def presence(self, ctx: ViaContext) -> str:
         rec = ctx.declared_via("rf")

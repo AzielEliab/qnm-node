@@ -42,6 +42,7 @@ from qnsd.pairs import HOP_MAX_DEFAULT, Pairs
 from qnsd.photon import Photon, loads as photon_loads, make_photon
 from qnsd.policy import Policy
 from qnsd.receipts import Receipts
+from qnsd.sanitize import sanitize_photon
 from qnsd.translate import apply as translate_apply
 from qnsd.vias import ADAPTERS, VIA_ORDER
 from qnsd.vias.base import ViaContext
@@ -168,6 +169,9 @@ class Node:
             "bind": DEFAULT_BIND,
             "softwares_tab": False,
             "node_gate": False,
+            "az_generator": False,
+            "call_az_generator": False,
+            "public_qnsd_proxy": False,
             "mesh_enable": False,
         }
 
@@ -353,6 +357,7 @@ class Node:
             self._write_receipt("fold", {"teth": card.get("teth")})
         inner = card.get("inner") or {}
         photon = self._photon_from_inner(inner, via_in=via)
+        sanitize_photon(photon.to_dict())
         result = self.stack.admit(data, via=via, ctx=self.ctx())
         self._write_receipt("admit", {"via": via, "photon_id": photon.photon_id, "kind": result.kind})
         return {

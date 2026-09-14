@@ -12,6 +12,7 @@ from typing import Any
 from qnsd.boot import AUTHOR, SPEC, QNSRefuse
 from qnsd.photon import HOP_MAX_DEFAULT, Photon
 from qnsd.policy import Policy
+from qnsd.sanitize import sanitize_photon
 from qnsd.translate import apply as translate_apply
 from qnsd.vias import ADAPTERS, VIA_ORDER
 from qnsd.vias.base import ABSENT, FAIL, PERM, PROBE, ViaAdapter, ViaContext, ViaResult
@@ -52,6 +53,7 @@ class ViaStack:
     ) -> dict[str, Any]:
         pol = policy or self.policy
         body = photon.to_dict() if isinstance(photon, Photon) else dict(photon)
+        sanitize_photon(body)
         photon_id = str(body.get("photon_id") or "")
         hop = int(body.get("hop") or 0)
         if "hop_max" in body and body["hop_max"] is not None:

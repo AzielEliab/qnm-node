@@ -7,9 +7,9 @@ with **[AIH-WP-1.3](docs/AIH-WP-1.3.md)** Spiderweb Pair-Bind
 remains **AIH-WP-1.1**.
 
 **Author:** Aziel Eliab only
-**Date:** September 2026 · v1.2.0
+**Date:** September 2026 · v1.3.0
 **License:** [Apache-2.0](LICENSE)
-**Spec:** QNM-BUILD-1.0 · AIH-WP-1.3 · QNS-CD-1.0
+**Spec:** QNM-BUILD-1.0 · AIH-WP-1.3 · QNS-CD-1.0 · FABRIC-MESH-PIPELINE-1.0
 
 > Radios off. Receipts to disk. Poison refused, not interpreted.
 > Pair-id outlives the path. Waiting is not death.
@@ -27,13 +27,31 @@ Local **qnsd owns vias**. Suite Workers **cite / proxy only**.
 bearers, a visible outbox, declared tethers, PHOENIX-LOCK (local wait /
 re-seal after poison or isolation; not public hostname restore),
 QNM-S (score never reads views), medium-independent pair-ids that
-forward only along existing spiderweb edges, and a sibling `qnsd`
+forward only along existing spiderweb edges, a sibling `qnsd`
 process where the photon is the packet and restriction walks the next
-via class in one program.
+via class in one program, and a local fabric pipeline
+(ingress → APG → tip/dwell/claim strangers → walker → translate →
+outbox → cold-copy / phoenix / reheal / re-expand).
 
-**THIS IS NOT:** a VPN, a radio mesh, Lumen, Mandible, `lattice_online`,
-`mesh_complete`, an account system, a publish path, Bell-pair physics,
-or a qubit machine.
+**THIS IS NOT:** a VPN, a live radio mesh, Lumen, Mandible,
+`lattice_online`, `mesh_complete`, an account system, a publish path,
+Bell-pair physics, a qubit machine, a public `qnsd` proxy, a Node Gate,
+or a call into AZ Generator.
+
+### REAL vs MOCK vs LAW
+
+| Kind | What |
+|------|------|
+| **REAL** | Local 127.0.0.1 process. APG refuse-first. Split-wires tip + dwell clocks. Photon (`QNS1` 1.3). Walker + translate. Outbox / receipts / chain on disk. Cold copies, archive re-expand, own-tip reheal, phoenix-WAIT. Loopback bind. Radio and remote bearers stay off. |
+| **MOCK** | Bluetooth, RF, and camera/emitter **device hooks**. Protocol-complete (`ViaAdapter`). Invented live hardware is forbidden. PLC is software-declared (no invented PHY). |
+| **LAW** | CROSS-NETWORK-SURVIVAL / REHEAL / SPLIT-WIRES / COLD-COPY / NO-LIE / NO-REWRITE / QNS-CD / FABRIC-MESH-PIPELINE. `GET /v1/mesh` never enables. No Softwares-tab product. Identity Aziel Eliab only. |
+
+MirageGrid **Node Gate** is an **outward claim surface** fed by a
+deep-node AZ Generator. That generator is **not called** from qnm.
+Node Gate is a MirageGrid subsystem only. Its claim clock is an
+**external stranger** to qnm tip and dwell clocks. qnm stays local
+fabric. Radios stay mock / default-off. Phoenix does not restore a
+public hostname.
 
 ## Bulletproof law (QNM-BUILD-1.0)
 
@@ -138,6 +156,7 @@ Local API binds **127.0.0.1:8891** only:
 | `POST /local/survive` | Public network dead; local verify / append / archive |
 | `GET/POST /local/nolie` | No-lie / no-rewrite status; receipts still hash |
 | `POST /local/rewrite` | Always refused (`QNM-NO-REWRITE`) |
+| `GET/POST /local/fabric` | Pipeline status / one local pass (never calls AZ Generator) |
 
 `qnsd` adds `POST /local/policy` and `POST /local/declare` on the same
 loopback bind (port from `cfg/node.json`, default 8891).
@@ -162,17 +181,19 @@ still implement `ViaAdapter`. See [docs/QNS-CD-1.0.md](docs/QNS-CD-1.0.md)
 qnm/                 boot, node, chain, apg, bearers, outbox,
                      phoenix, score, memorial, tethers,
                      pairs, spiderweb, wires, coldcopy, archive,
-                     nolie
+                     nolie, fabric
 qnsd/                QNS-CD-1.0 daemon: photon, walker, vias, light,
-                     azpipe, policy, api (127.0.0.1)
+                     azpipe, policy, sanitize, api (127.0.0.1)
 modules/anon-broadcast/   loopback-only style tool (never a publish path)
 cfg/node.json
 data/{chain,locks,outbox,receipts,witness,vault,archive}
 docs/QNM-BUILD-1.0.md
 docs/AIH-WP-1.3.md
 docs/QNS-CD-1.0.md   (+ PDF companion note)
+docs/FABRIC-MESH-PIPELINE-1.0.md
 docs/DESIGN-INDEX.md
 tests/               QNM §14 + AIH-WP-1.3 + QNS-CD-1.0 §14
+                     + fabric pipeline + attack-surface
 ```
 
 ## Tests (§14 + AIH-WP-1.3 + QNS-CD-1.0)
@@ -189,8 +210,10 @@ bearer off, spiderweb forward
 with APG, isolated node has no edges, hop_max / loop drop, and QNS-CD
 via Protocol / walker / light OCC / lock-backed outbox wait / pair-cut
 emit stop. Also receipts-still-hash, verify-without-voice, no rewrite
-key, published-tip immutable, no one-tunnel copies, and no lie-to-live
-heal.
+key, published-tip immutable, no one-tunnel copies, no lie-to-live
+heal, fabric pipeline (three-clock strangers; no AZ Generator call),
+and attack-surface (remote off, radio refuse, loopback, APG
+size/marker, forbidden live symbols, no public qnsd proxy).
 
 ## Cite
 
@@ -208,11 +231,17 @@ Eliab, Aziel. (2026). NO-LIE-1.0 / NO-REWRITE-1.0 [Law].
 Companion: QNM-BUILD-1.0. Apache-2.0.
 https://github.com/AzielEliab/qnm-node
 
+Eliab, Aziel. (2026). FABRIC-MESH-PIPELINE-1.0 local fabric mesh
+pipeline [Law]. Companion: QNM-BUILD-1.0 · QNS-CD-1.0. Apache-2.0.
+https://github.com/AzielEliab/qnm-node
+
 Do not invent a DOI.
 
 See [docs/QNM-BUILD-1.0.md](docs/QNM-BUILD-1.0.md),
 [docs/AIH-WP-1.3.md](docs/AIH-WP-1.3.md),
-[docs/QNS-CD-1.0.md](docs/QNS-CD-1.0.md), and
-[docs/DESIGN-INDEX.md](docs/DESIGN-INDEX.md). AZHub / AZInterface remain
-separate software (AIH-WP-1.1). Suite Workers cite/proxy only. GET /v1/mesh
-never enables. No Node Gate.
+[docs/QNS-CD-1.0.md](docs/QNS-CD-1.0.md),
+[docs/FABRIC-MESH-PIPELINE-1.0.md](docs/FABRIC-MESH-PIPELINE-1.0.md),
+and [docs/DESIGN-INDEX.md](docs/DESIGN-INDEX.md). AZHub / AZInterface
+remain separate software (AIH-WP-1.1). Suite Workers cite/proxy only.
+GET /v1/mesh never enables. No Node Gate in qnm-node (Node Gate =
+MirageGrid only).
