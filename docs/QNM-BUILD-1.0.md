@@ -41,16 +41,20 @@ Aziel Eliab only. No other author name. No account object. A node is an
 - **Cross-network survival:** if the public network and live data die,
   the chain still survives. Local verify / append stay offline. The
   mesh does not need the public network to preserve tips.
+- **No lie:** the network never lies, even to stay alive, adapt, or
+  prevent death. Receipts still hash. Verify is without voice.
+- **No rewrite:** there is no rewrite key. A published tip cannot be
+  rewritten or mutated. Copies are not all on one tunnel.
 
 ## §3 Tree
 
 ```
-qnm/{boot,node,chain,apg,bearers,outbox,phoenix,score,memorial,tethers,pairs,spiderweb,wires,coldcopy,archive}.py
+qnm/{boot,node,chain,apg,bearers,outbox,phoenix,score,memorial,tethers,pairs,spiderweb,wires,coldcopy,archive,nolie}.py
 modules/anon-broadcast/          loopback-only
 cfg/node.json
 data/{chain,locks,outbox,receipts,witness,vault,archive}
-docs/{QNM-BUILD-1.0,AIH-WP-1.3,SPLIT-WIRES-1.0,COLD-COPY-1.0,RE-EXPAND-1.0,REHEAL-1.0,CROSS-NETWORK-SURVIVAL-1.0}.md
-tests/                           §14 + AIH-WP-1.3 + wires + cold-copy + archive + reheal + survival
+docs/{QNM-BUILD-1.0,AIH-WP-1.3,SPLIT-WIRES-1.0,COLD-COPY-1.0,RE-EXPAND-1.0,REHEAL-1.0,CROSS-NETWORK-SURVIVAL-1.0,NO-LIE-1.0,NO-REWRITE-1.0}.md
+tests/                           §14 + AIH-WP-1.3 + wires + cold-copy + archive + reheal + survival + nolie
 ```
 
 ## §4 Boot
@@ -80,6 +84,7 @@ the pull**. Local API binds **127.0.0.1** only:
 `/local/tick` `/local/pull` `/local/cite` `/local/emit`
 `/local/rejoin` `/local/vault` `/local/wires`
 `/local/archive` `/local/reheal` `/local/survive`
+`/local/nolie` `/local/rewrite`
 
 ## §6 Bearers
 
@@ -149,6 +154,7 @@ clears tethers and outbox. `account_resurrect` / `account_restore` /
 | `tests/test_archive.py` | RE-EXPAND-1.0: chain bytes, not summaries; new node on tip; no crawler / index / weights |
 | `tests/test_reheal.py` | REHEAL-1.0: own last good + trusted pull; no neighbor / majority; chatter is status+tip-hash |
 | `tests/test_survival.py` | CROSS-NETWORK-SURVIVAL-1.0: offline verify/append after public death; refuse network-required |
+| `tests/test_nolie.py` | NO-LIE-1.0 / NO-REWRITE-1.0: receipts still hash; verify without voice; no rewrite key; published tip immutable; no one-tunnel; no lie-to-live heal |
 
 ## §15 Split the wires
 
@@ -195,6 +201,16 @@ public network to preserve tips. `require_public_network` and
 `require_live_data` refuse (`QNM-SURVIVE-OFFLINE`). See
 [CROSS-NETWORK-SURVIVAL-1.0](CROSS-NETWORK-SURVIVAL-1.0.md).
 
+## §20 No lie / no rewrite
+
+The network never lies — not to a peer, not to itself, not to stay
+alive, adapt, or prevent death. Receipts still hash. Verify is
+hash-only (no voice). There is no rewrite key. A published tip cannot
+be rewritten or mutated (`QNM-NO-REWRITE`). Copies are not all on one
+tunnel (`QNM-NO-ONE-TUNNEL`). Lie-to-live heal paths refuse
+(`QNM-NO-LIE-TO-LIVE`). See [NO-LIE-1.0](NO-LIE-1.0.md) and
+[NO-REWRITE-1.0](NO-REWRITE-1.0.md).
+
 ## Cite
 
 Eliab, Aziel. (2026). QNM-BUILD-1.0 Quantum Node Mesh local node
@@ -205,8 +221,8 @@ Companion: QNM-BUILD-1.0. Apache-2.0.
 https://github.com/AzielEliab/qnm-node
 
 Eliab, Aziel. (2026). SPLIT-WIRES-1.0 / COLD-COPY-1.0 / RE-EXPAND-1.0 /
-REHEAL-1.0 mesh law [Law]. Companion: QNM-BUILD-1.0. Apache-2.0.
-https://github.com/AzielEliab/qnm-node
+REHEAL-1.0 / NO-LIE-1.0 / NO-REWRITE-1.0 mesh law [Law]. Companion:
+QNM-BUILD-1.0. Apache-2.0. https://github.com/AzielEliab/qnm-node
 
 Do not invent a DOI.
 

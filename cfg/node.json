@@ -58,5 +58,10 @@
   "cold_copy_n": 3,
   "public_network_required": false,
   "tips_need_live_data": false,
-  "cross_network_survival": true
+  "cross_network_survival": true,
+  "no_lie": true,
+  "no_rewrite": true,
+  "rewrite_key": false,
+  "verify_without_voice": true,
+  "copies_one_tunnel": false
 }

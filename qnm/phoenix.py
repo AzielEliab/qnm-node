@@ -10,6 +10,8 @@ verified pull of bytes it already trusted — or it phoenix-WAITs.
 It does not heal by listening to neighbors. Allowed chatter:
 live / locked / isolated / tip-hash. Forbidden: bodies, diffs,
 “here’s what you should be,” vote-to-fix. No majority fanfic.
+No lie to stay alive, adapt, or prevent death (NO-LIE-1.0).
+No rewrite / mutate of a published tip to look healthy.
 
 Arm is an operator act. After arm, the node stays on this machine.
 Mesh does not climb back onto the public hostname by itself.
@@ -79,6 +81,24 @@ class Phoenix:
             "no majority fanfic reheal",
         )
 
+    def lie_to_stay_alive(self, *_args: object, **_kwargs: object) -> None:
+        raise QNMRefuse(
+            "QNM-NO-LIE-TO-LIVE",
+            "network never lies to stay alive",
+        )
+
+    def lie_to_adapt(self, *_args: object, **_kwargs: object) -> None:
+        raise QNMRefuse(
+            "QNM-NO-LIE-TO-LIVE",
+            "network never lies to adapt",
+        )
+
+    def lie_to_prevent_death(self, *_args: object, **_kwargs: object) -> None:
+        raise QNMRefuse(
+            "QNM-NO-LIE-TO-LIVE",
+            "network never lies to prevent death",
+        )
+
     def admit_chatter(self, message: dict[str, Any]) -> dict[str, Any]:
         extra = set(message) - {"status", "tip_hash", "tip", "plane", "peer"}
         banned = extra | (set(message) & CHATTER_FORBIDDEN)
@@ -115,6 +135,7 @@ class Phoenix:
             "last_good_bytes": self.last_good_bytes,
             "heal_from_neighbor": False,
             "majority_reheal": False,
+            "lie_to_stay_alive": False,
             "spec": SPEC,
             "reheal": REHEAL_SPEC,
             "author": AUTHOR,

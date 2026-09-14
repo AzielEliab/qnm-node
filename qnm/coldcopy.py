@@ -25,6 +25,7 @@ from pathlib import Path
 from typing import Any
 
 from qnm.boot import AUTHOR, SPEC, QNMRefuse, _utc_now, sha256_hex
+from qnm.nolie import is_tunnel_host
 from qnm.wires import HASH_LEN, WIRES_SPEC, canonical_hash
 
 COLD_SPEC = "COLD-COPY-1.0"
@@ -87,6 +88,7 @@ class ColdCopy:
             "unmarked_hydra": False,
             "vpn_concealment": False,
             "creator_session_required": False,
+            "copies_one_tunnel": False,
         }
 
     def _append(self, path: Path, row: dict[str, Any]) -> dict[str, Any]:
@@ -192,6 +194,19 @@ class ColdCopy:
     def vpn_conceal(self, *_args: object, **_kwargs: object) -> None:
         raise QNMRefuse("QNM-COLD-NO-VPN", "no VPN concealment")
 
+    def one_tunnel(self, *_args: object, **_kwargs: object) -> None:
+        raise QNMRefuse(
+            "QNM-NO-ONE-TUNNEL",
+            "copies are not all on one tunnel",
+        )
+
+    def hosts_for(self, digest: str) -> set[str]:
+        tip = canonical_hash(digest)
+        hosts = {str(row["host"]) for row in self.replicas() if row.get("tip") == tip}
+        if (self.objects / tip).is_file():
+            hosts.add("local")
+        return hosts
+
     def pull_origin(self) -> dict[str, Any]:
         """Public origin / Worker / DNS die with the pull. Cold copies remain."""
         self.origin_alive = False
@@ -259,6 +274,12 @@ class ColdCopy:
         }
 
     def _place(self, digest: str, host: str, *, kind: str) -> dict[str, Any]:
+        existing = {str(row["host"]) for row in self.replicas() if row.get("tip") == digest}
+        after = existing | {host}
+        if is_tunnel_host(host) and after.issubset({host}):
+            self.one_tunnel()
+        if after and all(is_tunnel_host(item) for item in after) and len(after) == 1:
+            self.one_tunnel()
         rec = {
             "tip": digest,
             "host": host,

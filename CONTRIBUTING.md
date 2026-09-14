@@ -41,6 +41,9 @@ Python 3.10+. Core is stdlib only. pytest is the dev extra. No network.
 15. Split the wires. Cold copies. Re-expand from archive bytes. Reheal
     from own last good tip or phoenix-WAIT. Cross-network survival:
     public network is not required to preserve tips.
+16. No lie. No rewrite. Receipts still hash. Verify without voice.
+    Copies not all on one tunnel. Network never lies to stay alive,
+    adapt, or prevent death. There is no rewrite key.
 
 ## License of contributions
 

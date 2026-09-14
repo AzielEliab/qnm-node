@@ -7,7 +7,10 @@ No auto-heal. No LIVE from site ping. PHOENIX-LOCK waits / re-seals
 locally after poison or isolation — it does not restore a public
 hostname. Public tunnels and sites die with the pull. Split the wires:
 tick plane is presence + tip hash only; payload plane is pull-only.
-Cold copies remain after a public pull. Local API binds 127.0.0.1 only.
+Cold copies remain after a public pull. The network never lies, even
+to stay alive. No rewrite key. Published tip is immutable. Receipts
+still hash. Verify is without voice. Copies are not all on one tunnel.
+Local API binds 127.0.0.1 only.
 Receipts go to disk. Radios stay off. Pair-id is medium-independent
 (AIH-WP-1.3). Isolation cuts pair edges. Not Bell-pair physics.
 """
@@ -43,6 +46,7 @@ from qnm.archive import ChainArchive
 from qnm.chain import Chain
 from qnm.coldcopy import ColdCopy
 from qnm.memorial import Memorial
+from qnm.nolie import NoLie, receipt_digest
 from qnm.outbox import Outbox
 from qnm.pairs import HOP_MAX_DEFAULT, Pairs
 from qnm.phoenix import Phoenix
@@ -97,6 +101,8 @@ LOCAL_PATHS = {
     "/local/archive",
     "/local/reheal",
     "/local/survive",
+    "/local/nolie",
+    "/local/rewrite",
 }
 
 
@@ -128,6 +134,11 @@ def load_cfg(root: Path) -> dict[str, Any]:
             "dwell_s": DWELL_S,
             "public_network_required": False,
             "tips_need_live_data": False,
+            "no_lie": True,
+            "no_rewrite": True,
+            "rewrite_key": False,
+            "verify_without_voice": True,
+            "copies_one_tunnel": False,
         }
     return json.loads(path.read_text(encoding="utf-8"))
 
@@ -151,6 +162,7 @@ class Node:
         self.wires = Wires(self.root)
         self.vault = ColdCopy(self.root, replica_n=int(self.cfg.get("cold_copy_n") or 3))
         self.archive = ChainArchive(self.root)
+        self.nolie = NoLie(self.root)
         self.memorial = Memorial(self.root)
         self.pairs = Pairs(self.memorial)
         self.spiderweb: Spiderweb | None = None
@@ -173,6 +185,7 @@ class Node:
             "author": AUTHOR,
             "on_disk": True,
         }
+        receipt["receipt_hash"] = receipt_digest(receipt)
         with self._receipt_log.open("a", encoding="utf-8") as fh:
             fh.write(json.dumps(receipt, sort_keys=True, separators=(",", ":")) + "\n")
             fh.flush()
@@ -189,6 +202,23 @@ class Node:
             if line.strip():
                 items.append(json.loads(line))
         return items
+
+    def verify_receipts(self, *, require_voice: bool = False, voice_confirm: bool = False) -> dict[str, Any]:
+        """Receipts that still hash. Verify-without-voice."""
+        return self.nolie.verify_without_voice(
+            self.receipts(),
+            require_voice=require_voice,
+            voice_confirm=voice_confirm,
+        )
+
+    def rewrite_receipt(self, *_args: object, **_kwargs: object) -> None:
+        raise QNMRefuse("QNM-NO-REWRITE", "receipts are append-only; no rewrite")
+
+    def rewrite_published(self, tip: str = "", new_tip: str = "") -> None:
+        self.nolie.rewrite_published(tip, new_tip)
+
+    def rewrite_key(self, *_args: object, **_kwargs: object) -> None:
+        self.nolie.rewrite_key()
 
     def _advance(self, dest: str) -> None:
         if dest == self.state:
@@ -227,6 +257,12 @@ class Node:
             "public_network_required": False,
             "tips_need_live_data": False,
             "cross_network_survival": True,
+            "no_lie": True,
+            "no_rewrite": True,
+            "rewrite_key": False,
+            "verify_without_voice": True,
+            "copies_one_tunnel": False,
+            "published": self.nolie.published(),
             "tethers": self.tethers.list(),
             "pairs": self.pairs.list(),
             "hop_max": HOP_MAX_DEFAULT,
@@ -303,6 +339,15 @@ class Node:
 
     def heal(self) -> None:
         raise QNMRefuse("QNM-NO-AUTO-HEAL", "no auto-heal")
+
+    def lie_to_stay_alive(self, *_args: object, **_kwargs: object) -> None:
+        self.nolie.lie_to_stay_alive()
+
+    def lie_to_adapt(self, *_args: object, **_kwargs: object) -> None:
+        self.nolie.lie_to_adapt()
+
+    def lie_to_prevent_death(self, *_args: object, **_kwargs: object) -> None:
+        self.nolie.lie_to_prevent_death()
 
     def require_public_network(self) -> None:
         raise QNMRefuse(
@@ -626,6 +671,22 @@ class Node:
             return self.archive_act(payload)
         if op in ("need_network", "require_public_network", "require_live_data"):
             self.require_public_network() if op != "require_live_data" else self.require_live_data()
+        if op in ("rewrite", "mutate"):
+            self.nolie.rewrite_published(str(payload.get("tip") or ""), str(payload.get("new_tip") or ""))
+        if op in ("rewrite_key", "apply_rewrite_key"):
+            self.nolie.rewrite_key()
+        if op in ("lie_to_stay_alive", "lie_to_live", "lie"):
+            self.nolie.lie_to_stay_alive()
+        if op == "lie_to_adapt":
+            self.nolie.lie_to_adapt()
+        if op == "lie_to_prevent_death":
+            self.nolie.lie_to_prevent_death()
+        if op in ("require_voice", "voice_confirm"):
+            self.nolie.require_voice()
+        if op in ("one_tunnel", "all_on_tunnel"):
+            self.nolie.one_tunnel()
+        if op == "rewrite_receipt":
+            self.rewrite_receipt()
         self._write_receipt("ingress", {"op": op})
         return {"ok": True, "admitted": True, "op": op, "state": self.state}
 
@@ -684,7 +745,10 @@ class Node:
         verified = self.chain.verify()
         self.wires.mark_verified(bool(verified["ok"]))
         rec = self.wires.emit_tick(self.install_root or "local", verified["tip"])
+        self.nolie.publish(rec["tip_hash"])
         self._write_receipt("emit_tick", {"tip": rec["tip_hash"], "verified": True})
+        rec["published"] = True
+        rec["rewrite"] = False
         return rec
 
     def rejoin_island(self, payload: dict[str, Any]) -> dict[str, Any]:
@@ -711,6 +775,8 @@ class Node:
             self.vault.unmarked_hydra()
         if op == "vpn":
             self.vault.vpn_conceal()
+        if op in ("one_tunnel", "all_on_tunnel"):
+            self.vault.one_tunnel()
         if op == "pull_origin":
             out = self.vault.pull_origin()
             self._write_receipt("vault_pull_origin", {"die_with_pull": True, "cold_copies_remain": True})
@@ -773,6 +839,7 @@ class Node:
         """Heal from own last good tip + trusted pull, or phoenix-WAIT."""
         self._require_not_scorched()
         body = dict(payload or {})
+        self.nolie.refuse_payload(body)
         if body.get("neighbor") or body.get("listen") or body.get("should_be") or body.get("advice"):
             self.phoenix.neighbor_heal()
         if body.get("vote") or body.get("majority") or body.get("vote_to_fix"):
@@ -846,6 +913,44 @@ class Node:
         out["tip"] = seated.chain.tip
         out["pairs"] = len(seated.pairs.list())
         return out
+
+    def emit_false(self, *_args: object, **_kwargs: object) -> None:
+        raise QNMRefuse(
+            "QNM-NO-LIE-TO-LIVE",
+            "false emit to look live is a lie",
+        )
+
+    def nolie_act(self, payload: dict[str, Any] | None = None) -> dict[str, Any]:
+        self._require_not_scorched()
+        body = dict(payload or {})
+        op = str(body.get("op") or body.get("action") or "status")
+        self.nolie.refuse_payload(body)
+        if op in ("rewrite", "mutate"):
+            self.nolie.rewrite_published(str(body.get("tip") or ""), str(body.get("new_tip") or ""))
+        if op in ("rewrite_key", "apply_rewrite_key"):
+            self.nolie.rewrite_key()
+        if op in ("lie_to_stay_alive", "lie_to_live", "lie"):
+            self.nolie.lie_to_stay_alive()
+        if op == "lie_to_adapt":
+            self.nolie.lie_to_adapt()
+        if op == "lie_to_prevent_death":
+            self.nolie.lie_to_prevent_death()
+        if op in ("require_voice", "voice_confirm"):
+            self.nolie.require_voice()
+        if op in ("one_tunnel", "all_on_tunnel"):
+            self.nolie.one_tunnel()
+        if op == "rewrite_receipt":
+            self.rewrite_receipt()
+        if op == "false_emit":
+            self.emit_false()
+        if op == "verify":
+            return self.verify_receipts(
+                require_voice=bool(body.get("require_voice")),
+                voice_confirm=bool(body.get("voice_confirm")),
+            )
+        if op == "publish":
+            return self.nolie.publish(str(body.get("tip") or self.chain.tip))
+        return self.nolie.status()
 
     def archive_act(self, payload: dict[str, Any]) -> dict[str, Any]:
         op = str(payload.get("op") or payload.get("action") or "pack")
@@ -1006,6 +1111,17 @@ class Node:
             return self.reheal(payload)
         if route == "/local/survive" and method == "POST":
             return self.survive_network_death()
+        if route == "/local/nolie" and method == "GET":
+            return self.nolie.status()
+        if route == "/local/nolie" and method == "POST":
+            payload = json.loads(body.decode("utf-8") or "{}") if body else {}
+            return self.nolie_act(payload)
+        if route == "/local/rewrite" and method == "POST":
+            payload = json.loads(body.decode("utf-8") or "{}") if body else {}
+            self.nolie.rewrite_published(
+                str(payload.get("tip") or ""),
+                str(payload.get("new_tip") or payload.get("replace_tip") or ""),
+            )
         raise QNMRefuse("QNM-LOOPBACK-ONLY", f"{method} {route}")
 
 
