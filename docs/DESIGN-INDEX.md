@@ -9,6 +9,11 @@ Companion to `QNM-BUILD-1.0.md` and `AIH-WP-1.3.md`.
 | [QNM-WP-1.0](./QNM-WP-1.0.md) | Quantum Node Mesh — local ON / public rollup dies with pull; cell 25 + 2 bridges |
 | [NODE-OPS-1.0](./NODE-OPS-1.0.md) | Node operations + surface law + phoenix wait / re-seal (not public hostname restore) |
 | [QNS-CD-1.0](./QNS-CD-1.0.md) | Quantum Node Signal Coding Design — local `qnsd` owns vias; photon packet |
+| [SPLIT-WIRES-1.0](./SPLIT-WIRES-1.0.md) | Tick plane = presence + tip hash; payload is pull-only; two clocks stay strangers |
+| [COLD-COPY-1.0](./COLD-COPY-1.0.md) | N named cold replicas; no live body sync; public pull does not erase copies |
+| [RE-EXPAND-1.0](./RE-EXPAND-1.0.md) | Archive bytes, not summaries; verify + new local node on tip |
+| [REHEAL-1.0](./REHEAL-1.0.md) | Own last good tip + trusted pull, or phoenix-WAIT; no neighbor / majority reheal |
+| [CROSS-NETWORK-SURVIVAL-1.0](./CROSS-NETWORK-SURVIVAL-1.0.md) | If network + live data die, chain survives (cold copy / re-expand / self-reheal) |
 
 QNM-WP-1.0 absorbs BUILD+TOPO: local process ON, public rollup OFF and
 dies with the pull; GET /v1/mesh never enables. Phoenix is wait /

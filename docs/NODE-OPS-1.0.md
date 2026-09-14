@@ -90,6 +90,13 @@ NODE-OPS-1.0                                                                    
   • Phoenix does not un-scorch a vault.
   • Poison does not forward across cell edges.
   • Three missed heartbeats = suspect. Suspect + APG hit = isolate.
+    Heartbeat loss is not poison and is not apply-last-packet.
+  • Reheal is own last good tip + trusted pull, or phoenix-WAIT. Not
+    neighbor chatter. No majority fanfic. Isolate drops tethers; other
+    nodes keep their chain.
+  • If the public network and live data die, the chain still survives
+    (cold copies / archive re-expand / self-reheal). Local verify /
+    append stay offline. Tips do not need the public network.
   • Bridge poison rotates both bridges before inter-cell traffic.
   • Held publish queue does not flush across phoenix without a new operator act.
   • Phoenix does not un-pull a site, re-issue a tunnel token, or rewrite DNS.
@@ -129,6 +136,7 @@ sentence. No token body.
   • qnm-node is not reachable off loopback in default config.
   • Spent mesh_id rejected on later local cell join. Phoenix wait has no outbound hunt packet.
   • Phoenix does not restore a public hostname. Pulled sites stay down (die with the pull).
+  • Offline verify / append still work after a public pull. require_public_network refuses.
   • Held queue does not flush across phoenix without a new act.
   • ARK hosted unlock remains stub. Cell does not halt when one leaf isolates.
 Does not add a Node Gate to “see security.” Does not turn MirageGrid into a VPN. Does not publish exploit recipes. Public

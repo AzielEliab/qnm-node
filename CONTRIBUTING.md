@@ -38,6 +38,9 @@ Python 3.10+. Core is stdlib only. pytest is the dev extra. No network.
     fails without the change.
 14. Local `qnsd` owns vias. Sticky-via banned. API 127.0.0.1 only.
     Photon id does not change across hops. Anon-broadcast never publishes.
+15. Split the wires. Cold copies. Re-expand from archive bytes. Reheal
+    from own last good tip or phoenix-WAIT. Cross-network survival:
+    public network is not required to preserve tips.
 
 ## License of contributions
 

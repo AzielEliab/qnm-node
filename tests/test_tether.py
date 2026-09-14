@@ -51,6 +51,21 @@ def test_api_tether_declare_and_cut(tmp_path: Path) -> None:
     assert node.tethers.list() == []
 
 
+def test_isolate_drops_tethers_other_node_keeps_chain(tmp_path: Path) -> None:
+    a = Node(tmp_path / "a")
+    b = Node(tmp_path / "b")
+    a.boot(entropy=b"a", nonce=b"a")
+    b.boot(entropy=b"b", nonce=b"b")
+    a.declare_tether("a", "b")
+    tip_b = b.chain.tip
+    a.isolate("poison")
+    assert a.tethers.list() == []
+    assert b.chain.tip == tip_b
+    with pytest.raises(QNMRefuse) as exc:
+        a.tethers.neighbor_rewire()
+    assert exc.value.code == "QNM-REHEAL-NO-NEIGHBOR"
+
+
 def test_no_auto_rewire_after_cut(tmp_path: Path) -> None:
     node = Node(tmp_path)
     node.boot(entropy=b"e", nonce=b"n")

@@ -45,5 +45,18 @@
     "local"
   ],
   "always_present": ["local", "qns", "operator"],
-  "declare_required": ["rf", "plc", "light"]
+  "declare_required": ["rf", "plc", "light"],
+  "split_wires": true,
+  "tick_min_s": 0.5,
+  "tick_max_s": 1.0,
+  "dwell_s": 777,
+  "live_body_sync": false,
+  "auto_splice": false,
+  "named_hosts_only": true,
+  "unmarked_hydra": false,
+  "vpn_concealment": false,
+  "cold_copy_n": 3,
+  "public_network_required": false,
+  "tips_need_live_data": false,
+  "cross_network_survival": true
 }

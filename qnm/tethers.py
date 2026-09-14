@@ -1,6 +1,8 @@
-"""Declared tethers — QNM-BUILD-1.0 §10.
+"""Declared tethers — QNM-BUILD-1.0 §10 / REHEAL-1.0.
 
 Visible corridors only. Cut drops clean: no leftover, no auto-rewire.
+Isolate / reheal drops every tether on this node. Other nodes keep
+their chain. Tethers do not reheal from neighbor chatter.
 Companion geometry is AIH-WP-1.1 (declared tethers, not Hub meaning).
 Pair-bind edges are AIH-WP-1.3 (medium-independent; not these tethers).
 """
@@ -77,5 +79,25 @@ class Tethers:
             "author": AUTHOR,
         }
 
+    def drop_all(self) -> dict[str, Any]:
+        """Isolate / reheal: cut every tether. Other nodes keep their chain."""
+        n = len(self.list())
+        self.clear()
+        return {
+            "ok": True,
+            "cut_count": n,
+            "residue": False,
+            "auto_rewire": False,
+            "reheal_from_neighbor": False,
+            "spec": SPEC,
+            "author": AUTHOR,
+        }
+
     def clear(self) -> None:
         _atomic_write(self.path, "")
+
+    def neighbor_rewire(self, *_args: object, **_kwargs: object) -> None:
+        raise QNMRefuse(
+            "QNM-REHEAL-NO-NEIGHBOR",
+            "tethers drop; they do not reheal from neighbor chatter",
+        )

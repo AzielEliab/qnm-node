@@ -103,8 +103,12 @@ QNM-WP-1.0                                                                      
    • Do not store passwords in node state. Do not claim qubits.
    • Do not read Phoenix as “bring the .uk / public node back.” Sites pulled → public rollup down.
      Local node may keep verifying and appending. Mesh does not climb back onto the public hostname by itself.
+   • Do not make tip preservation depend on a live Worker or public network.
+     If network + live data die, the chain survives on cold copies / archive
+     re-expand / self-reheal. Local verify / append stay offline.
    • Concept is closed when both planes, cell math, ID spend, leaf-vs-bridge poison, phoenix wait / re-seal
-     without hunt or hostname restore, die-with-pull, and stub names are specified — they are.
+     without hunt or hostname restore, die-with-pull, split-wires, cold-copy,
+     re-expand, reheal, cross-network survival, and stub names are specified — they are.
  Specified 2026-09-06. Building qnm-node is implementation. This paper is the concept at 100%. Public identity: Aziel
  Eliab only.
 
