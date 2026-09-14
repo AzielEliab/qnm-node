@@ -43,10 +43,10 @@ QNM-WP-1.0                                                                      
 
   Ethernet / Wi-Fi / internet / Bluetooth / sneakernet         no             attempt — sneakernet is outbox file + hash; operator moves it
 
- Soft radio / RF / Bluetooth / Wi-Fi / photon / bitmesh that is not
- fielded hardware is MOCK. Channels-ON is a software path, not a live
- PHY. USB Plane C airgap needs operator offline-verify/attest before
- LIVE. No FAN.
+ Soft radio / RF / Bluetooth / Wi-Fi / GNSS / NFC stamp LIVE | ABSENT
+ | REFUSED from OS probes. Channels-ON is a software path, not an
+ invented live mesh. USB Plane C airgap needs operator
+ offline-verify/attest before LIVE. No FAN.
 
  No bearer carries a password. No bearer is a browser login.
 

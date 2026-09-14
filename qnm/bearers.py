@@ -21,6 +21,14 @@ DEFAULT_OFF = ("operator", "lan", "radio", "remote", "wifi", "bt")
 FABRIC_ARM = ("lan", "radio", "wifi", "bt")
 
 
+def _radios_status() -> str:
+    """LIVE if any OS radio adapter is present; else ABSENT. Never MOCK."""
+    from qnsd.phy import probe_all
+
+    cards = probe_all()
+    return "LIVE" if cards.get("live") else "ABSENT"
+
+
 class Bearers:
     def __init__(self) -> None:
         self.fabric_armed = False
@@ -42,8 +50,8 @@ class Bearers:
         return {
             "ok": True,
             "armed": True,
-            "channels_on_means": "software path allowed; not fielded PHY",
-            "radios_status": "ABSENT",
+            "channels_on_means": "software path allowed; OS PHYs LIVE|ABSENT|REFUSED",
+            "radios_status": _radios_status(),
             "radios_fielded": False,
             "bearers": self.snapshot(),
             "live_rf_mesh": False,
@@ -72,7 +80,7 @@ class Bearers:
             "armed": self.fabric_armed and name in FABRIC_ARM and on,
             "live_link": False,
             "radios_fielded": False,
-            "radios_status": "ABSENT",
+            "radios_status": _radios_status(),
             "bearers": self.snapshot(),
             "spec": SPEC,
             "author": AUTHOR,

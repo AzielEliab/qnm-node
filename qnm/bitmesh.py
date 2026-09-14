@@ -2,8 +2,8 @@
 
 Geohash (or equivalent) binds to a tip for **internal bitmesh routing
 only**. This is not public ACT-RECEIPT geo and not a fielded radio.
-The bitmesh channel is **MOCK** until real PHY exists. Public receipts
-stay no user / no geo / no IP.
+Bitmesh geo binds only from a LIVE GNSS fix (`RADIO-NO-GNSS`
+without a receiver). Public receipts stay no user / no geo / no IP.
 
 Author: Aziel Eliab only.
 """

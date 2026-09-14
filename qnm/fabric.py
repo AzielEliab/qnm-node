@@ -5,8 +5,8 @@ translate → outbox → cold-copy / phoenix / reheal / re-expand.
 
 Operator override (ALL-CHANNELS-ON): when fabric is enabled, the
 software path allows RF, Bluetooth, Wi-Fi, and photon/QNS1 light,
-plus lan/plc/operator/local. That is not fielded radios. Soft PHY
-hooks stay **MOCK** — no invented live-link success.
+plus lan/plc/operator/local. OS radios stamp LIVE | ABSENT |
+REFUSED from host probes — no invented live-link success.
 
 qnm-node never calls AZ Generator. Node Gate is a MirageGrid
 subsystem only (outward claim surface). GET /v1/mesh never enables
@@ -235,7 +235,7 @@ class Fabric:
         }
 
     def enable(self, node: Any | None = None) -> dict[str, Any]:
-        """Allow the software channel path. Soft radios stay MOCK."""
+        """Allow the software channel path. OS PHYs stay LIVE|ABSENT."""
         self.enabled = True
         if node is not None:
             self.root = Path(getattr(node, "root", self.root or Path.cwd()))

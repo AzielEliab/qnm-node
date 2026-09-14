@@ -74,8 +74,8 @@ def test_01_all_vias_import_protocol() -> None:
             assert adapter.mock is False
             assert adapter.device_hook == "os"
         elif name == "light":
-            assert adapter.mock is True
-            assert adapter.device_hook == "MOCK"
+            assert adapter.mock is False
+            assert adapter.device_hook == "HOOK-PENDING"
         else:
             assert adapter.mock is False
 

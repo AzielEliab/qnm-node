@@ -44,7 +44,7 @@ outbox → cold-copy / phoenix / reheal / re-expand).
 Bell-pair physics, a qubit machine, a public `qnsd` proxy, a Node Gate,
 or a call into AZ Generator.
 
-### REAL vs MOCK vs LAW
+### REAL vs LIVE / ABSENT / REFUSED vs LAW
 
 | Kind | What |
 |------|------|

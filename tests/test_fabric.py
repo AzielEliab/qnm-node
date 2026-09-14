@@ -202,7 +202,7 @@ def test_walker_translate_declare_required_and_mocks(tmp_path: Path) -> None:
     assert bt.ADAPTER.device_hook == "os"
     assert rf.ADAPTER.device_hook == "os"
     assert wifi.ADAPTER.device_hook == "os"
-    assert light.ADAPTER.device_hook == "MOCK"
+    assert light.ADAPTER.device_hook == "HOOK-PENDING"
     assert light.ADAPTER.protocol == "REAL"
     assert qnsd.stack.adapters["local"].mock is False
 

@@ -40,16 +40,18 @@ Anon-broadcast stays a loopback sibling — never a publish path.
 - Not enabled by `GET /v1/mesh`. Not a Node Gate / IP panel.
 - Not a VPN, radio mesh claim, qubit machine, or Bell-pair physics.
 - Not Lumen / Mandible / `lattice_online` / `mesh_complete`.
-- Device hooks for Bluetooth, RF, Wi-Fi, photon-flash, and camera are
-  **MOCK** and still implement the Protocol. Mock is honest. Invented
-  hardware is not. Channels-ON is a software path, not fielded radios.
+- Cellular / Wi-Fi / BT / GNSS / NFC are LIVE OS bindings or
+  ABSENT / REFUSED. Camera/emitter stay HOOK-PENDING. Invented
+  hardware is forbidden. Channels-ON is a software path, not a
+  fake live mesh.
 
 ## §4 Tree
 
 ```
 qnsd/{boot,node,photon,outbox,walker,translate,apg,azpipe,
       chain,receipts,pairs,memorial,policy,api}.py
-qnsd/vias/{base,lan,wifi,plc,bt,rf,light,qns,operator,local}.py
+qnsd/vias/{base,lan,wifi,plc,bt,rf,gps,nfc,light,qns,operator,local}.py
+qnsd/phy.py              RADIO-PHY-1.0 OS probes
 qnsd/light/{codec,camera,emitter}.py
 qnm/                 QNM-BUILD-1.0 (reused; not replaced)
 modules/anon-broadcast/   loopback sibling — never a publish path

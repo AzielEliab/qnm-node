@@ -14,13 +14,12 @@ a live RF mesh, a public hostname restore, or a call into AZ Generator.
 **Operator override (ALL-CHANNELS-ON).** When the node is
 **fabric-enabled**, the **software path** allows RF, Bluetooth,
 Wi-Fi, photon flashes (QNS1 light), plus lan / plc / operator /
-local. Channels-ON is not fielded radios. A PHY without fielded
-hardware stays a protocol-complete adapter stamped **MOCK** — never
-an invented live-link success. Photon / QNS1 **codec** stays REAL
-where already real; the photon **channel** is MOCK. Bitmesh is an
-internal software plane, also MOCK as a radio. `GET /v1/mesh` on
-public Workers still never enables suite radios. This is **local
-qnm-node fabric**.
+local. Channels-ON is not invented fielded radios. Cellular /
+Wi-Fi / BT / GNSS / NFC stamp **LIVE | ABSENT | REFUSED** from
+real OS probes — never mock chatter. Photon / QNS1 **codec** stays
+REAL; camera/emitter stay HOOK-PENDING. Bitmesh geo needs LIVE
+GNSS. `GET /v1/mesh` on public Workers still never enables suite
+radios. This is **local qnm-node fabric**.
 
 ## Sentence
 
@@ -34,7 +33,7 @@ phoenix-WAIT.
 
 A **127.0.0.1** process path. Unarmed, radios stay **OFF**
 (`QNM-RADIO-OFF` until fabric enable). **Fabric enable** allows the
-RF / BT / Wi-Fi / photon software path. Soft radios stay **MOCK**.
+software path. OS radios are LIVE only when adapters are present.
 `GET /v1/mesh` never enables. There is **no Node Gate
 in qnm-node**. This is **not** a Softwares-tab product.
 
@@ -53,9 +52,9 @@ stay **no user / no geo** (not ACT-RECEIPT geo).
 - Not public hostname restore. Phoenix waits / re-seals locally.
   Public tunnels and sites **die with the pull**.
 
-Device hooks for Bluetooth, RF, Wi-Fi, photon-flash, camera/emitter,
-and bitmesh are **MOCK**. The Protocol is real. Invented live
-hardware is forbidden. Spec already allows mock.
+OS radios (cellular / Wi-Fi / BT / GNSS / NFC) are LIVE or ABSENT.
+Emit without hardware is REFUSED. Camera/emitter stay HOOK-PENDING.
+The Protocol is real. Invented live hardware is forbidden.
 
 ## Pipeline (local only)
 
@@ -63,7 +62,7 @@ hardware is forbidden. Spec already allows mock.
 ingress
   → APG (raw bytes first; poison refused, not interpreted)
   → tip / dwell / claim stay strangers
-  → via walker (lan, wifi, plc, bt, rf, light, qns, operator, local)
+  → via walker (lan, wifi, plc, bt, rf, gps, nfc, light, qns, operator, local)
   → photon translate (same photon_id; translate=true across class)
   → outbox (force_via / path wait; lock-backed)
   → cold-copy / phoenix / reheal / re-expand
@@ -215,7 +214,7 @@ APG poison ⇒ **no walk**.
 | Control | Refuse |
 | --- | --- |
 | Bind | 127.0.0.1 / `::1` only (`QNM-LOOPBACK-ONLY`) |
-| Radio bearer | off until fabric enable (`QNM-RADIO-OFF`); then software-on (**MOCK**, not fielded / not live mesh) |
+| Radio bearer | off until fabric enable (`QNM-RADIO-OFF`); then software-on; OS PHYs LIVE\|ABSENT\|REFUSED |
 | Remote bearer | cannot enable (`QNM-BEARER-OFF`) |
 | APG size | ingress > 64 KiB (`QNM-APG-POISON`) |
 | APG markers | Lumen / Mandible / lattice_online / mesh_complete / hunt / publish |
