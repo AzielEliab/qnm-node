@@ -44,7 +44,8 @@ from qnm.boot import (
 )
 from qnm.archive import ChainArchive
 from qnm.chain import Chain
-from qnm.coldcopy import ColdCopy
+from qnm.bitmesh import Bitmesh, refuse_public_geo
+from qnm.coldcopy import DEVICE_CLASSES, ColdCopy
 from qnm.fabric import CLAIM_CLOCK, FABRIC_SPEC, Fabric
 from qnm.memorial import Memorial
 from qnm.nolie import NoLie, receipt_digest
@@ -105,6 +106,8 @@ LOCAL_PATHS = {
     "/local/nolie",
     "/local/rewrite",
     "/local/fabric",
+    "/local/persist",
+    "/local/bitmesh",
 }
 
 MESH_NEVER_ENABLE = frozenset(
@@ -118,7 +121,16 @@ MESH_NEVER_ENABLE = frozenset(
 
 
 def ensure_data_dirs(root: Path) -> None:
-    for name in ("chain", "locks", "outbox", "receipts", "witness", "vault", "archive"):
+    for name in (
+        "chain",
+        "locks",
+        "outbox",
+        "receipts",
+        "witness",
+        "vault",
+        "archive",
+        "bitmesh",
+    ):
         (Path(root) / "data" / name).mkdir(parents=True, exist_ok=True)
 
 
@@ -174,7 +186,9 @@ class Node:
         self.vault = ColdCopy(self.root, replica_n=int(self.cfg.get("cold_copy_n") or 3))
         self.archive = ChainArchive(self.root)
         self.nolie = NoLie(self.root)
-        self.fabric = Fabric()
+        self.fabric = Fabric(self.root)
+        self.bitmesh = Bitmesh(self.root)
+        self.qnsd: Any | None = None
         self.memorial = Memorial(self.root)
         self.pairs = Pairs(self.memorial)
         self.spiderweb: Spiderweb | None = None
@@ -185,6 +199,7 @@ class Node:
             self._receipt_log.write_text("", encoding="utf-8")
 
     def _write_receipt(self, kind: str, body: dict[str, Any]) -> dict[str, Any]:
+        refuse_public_geo(body)
         link = self.chain.append(kind, body)
         receipt = {
             "kind": kind,
@@ -197,6 +212,7 @@ class Node:
             "author": AUTHOR,
             "on_disk": True,
         }
+        refuse_public_geo(receipt)
         receipt["receipt_hash"] = receipt_digest(receipt)
         with self._receipt_log.open("a", encoding="utf-8") as fh:
             fh.write(json.dumps(receipt, sort_keys=True, separators=(",", ":")) + "\n")
@@ -256,7 +272,7 @@ class Node:
             "hub_law": HUB_LAW,
             "pair_bind": PAIR_SPEC,
             "bearers": self.bearers.snapshot(),
-            "radios": "off",
+            "radios": "armed" if self.fabric.enabled else "off",
             "auto_heal": False,
             "live_from_site_ping": False,
             "phoenix": self.phoenix.status(),
@@ -275,6 +291,7 @@ class Node:
             "verify_without_voice": True,
             "copies_one_tunnel": False,
             "fabric": self.fabric.status(),
+            "bitmesh": self.bitmesh.status(),
             "node_gate": False,
             "az_generator": False,
             "call_az_generator": False,
@@ -683,6 +700,12 @@ class Node:
             return self.rejoin_island(payload)
         if op == "vault":
             return self.vault_act(payload)
+        if op in ("persist", "persist_transfer"):
+            return self.persist_transfer(payload)
+        if op in ("bitmesh", "bitmesh_bind"):
+            return self.bind_bitmesh(payload)
+        if op == "fabric_enable":
+            return self.enable_fabric()
         if op in ("live_sync", "push", "unsend", "splice"):
             return self._refuse_wire_op(op)
         if op == "reheal":
@@ -817,6 +840,8 @@ class Node:
             )
             self._write_receipt("vault_transfer", {"tip": out["tip"], "host": out["host"]})
             return out
+        if op in ("persist", "devices", "persist_devices"):
+            return self.persist_transfer(payload)
         if op == "verify":
             return self.vault.verify(
                 str(payload.get("tip") or ""),
@@ -836,8 +861,79 @@ class Node:
             out["mesh_vault"] = self.vault.transfer(out["tip"], host=str(payload.get("vault_host") or "mesh-vault"))
         if payload.get("reader"):
             out["reader"] = self.vault.transfer(out["tip"], host=str(payload.get("reader") or "reader"))
+        if payload.get("persist") or payload.get("devices"):
+            out["persist"] = self.persist_transfer({"tip": out["tip"], "devices": payload.get("devices")})
         self._write_receipt("vault_store", {"tip": out["tip"]})
         return out
+
+    def persist_transfer(self, payload: dict[str, Any] | None = None) -> dict[str, Any]:
+        """Vault-on-transfer for laptop / phone / watch / radio / bluetooth."""
+        self._require_not_scorched()
+        body = dict(payload or {})
+        tip = str(body.get("tip") or self.chain.tip or "")
+        if not tip:
+            raise QNMRefuse("QNM-COLD-MISSING", "persist needs a tip")
+        devices = body.get("devices")
+        if devices is None:
+            wanted = DEVICE_CLASSES
+        else:
+            wanted = tuple(str(item) for item in devices)
+        out = self.vault.persist_across_devices(tip, devices=wanted)
+        item = self.outbox.queue(
+            "persist-transfer",
+            {
+                "tip": out["tip"],
+                "devices": list(out["devices"]),
+                "erased": False,
+                "waiting": False,
+            },
+        )
+        out["outbox_id"] = item["id"]
+        pulled = self.vault.pull_origin() if body.get("prove_pull") else None
+        if pulled is not None:
+            out["after_pull"] = {
+                "die_with_pull": True,
+                "cold_copies_remain": True,
+                "erased": False,
+                "tip": out["tip"],
+                "replicas": self.vault.replica_count(out["tip"]),
+            }
+        self._write_receipt(
+            "persist_transfer",
+            {"tip": out["tip"], "devices": list(out["devices"]), "erased": False},
+        )
+        return out
+
+    def bind_bitmesh(self, payload: dict[str, Any]) -> dict[str, Any]:
+        """Internal bitmesh geohash bind. Never a public receipt field."""
+        self._require_not_scorched()
+        if payload.get("public") or payload.get("act_receipt"):
+            raise QNMRefuse(
+                "QNM-NO-PUBLIC-GEO",
+                "bitmesh geo is not a public ACT-RECEIPT field",
+            )
+        tip = str(payload.get("tip") or self.chain.tip or "")
+        rec = self.bitmesh.bind(
+            tip,
+            lat=float(payload.get("lat") or payload.get("latitude") or 0.0),
+            lon=float(payload.get("lon") or payload.get("longitude") or 0.0),
+            precision=int(payload.get("precision") or 8),
+            public=bool(payload.get("public")),
+        )
+        self._write_receipt(
+            "bitmesh_bind",
+            {
+                "tip": rec["tip"],
+                "plane": rec["plane"],
+                "public": False,
+                "bound": True,
+            },
+        )
+        return rec
+
+    def enable_fabric(self) -> dict[str, Any]:
+        self._require_not_scorched()
+        return self.fabric.enable(self)
 
     def _seat_verified_tip(self, *, append_boot: bool) -> None:
         _ = append_boot
@@ -1152,7 +1248,16 @@ class Node:
         if route == "/local/fabric" and method == "GET":
             return self.fabric.status()
         if route == "/local/fabric" and method == "POST":
-            return self.fabric.run(self, body or b"{}")
+            payload = json.loads(body.decode("utf-8") or "{}") if body else {}
+            return self.fabric.run(self, payload)
+        if route == "/local/persist" and method == "POST":
+            payload = json.loads(body.decode("utf-8") or "{}") if body else {}
+            return self.persist_transfer(payload)
+        if route == "/local/bitmesh" and method == "GET":
+            return self.bitmesh.status()
+        if route == "/local/bitmesh" and method == "POST":
+            payload = json.loads(body.decode("utf-8") or "{}") if body else {}
+            return self.bind_bitmesh(payload)
         raise QNMRefuse("QNM-LOOPBACK-ONLY", f"{method} {route}")
 
 
@@ -1234,7 +1339,7 @@ def main(argv: list[str] | None = None) -> int:
                 "companion": COMPANION,
                 "hub_law": HUB_LAW,
                 "pair_bind": PAIR_SPEC,
-                "radios": "off",
+                "radios": "armed" if node.fabric.enabled else "off",
                 "bind": DEFAULT_BIND,
                 "hop_max": HOP_MAX_DEFAULT,
                 "bell_pair": False,

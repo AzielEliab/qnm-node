@@ -31,6 +31,14 @@ BANNED_KEYS = frozenset(
         "rewrite_key",
         "miragegrid_call",
         "back_gate",
+        "geohash",
+        "lat",
+        "lon",
+        "latitude",
+        "longitude",
+        "user",
+        "user_id",
+        "client_ip",
     }
 )
 

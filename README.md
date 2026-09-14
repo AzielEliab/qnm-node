@@ -11,8 +11,10 @@ remains **AIH-WP-1.1**.
 **License:** [Apache-2.0](LICENSE)
 **Spec:** QNM-BUILD-1.0 · AIH-WP-1.3 · QNS-CD-1.0 · FABRIC-MESH-PIPELINE-1.0
 
-> Radios off. Receipts to disk. Poison refused, not interpreted.
-> Pair-id outlives the path. Waiting is not death.
+> Fabric enable arms RF / BT / Wi-Fi / photon. PHY without a driver
+> is HOOK-PENDING — never invented live-link success. Receipts to disk.
+> Poison refused, not interpreted. Pair-id outlives the path.
+> Waiting is not death. GET /v1/mesh never enables.
 
 **Forks are welcome and always allowed.**
 
@@ -23,13 +25,16 @@ Local **qnsd owns vias**. Suite Workers **cite / proxy only**.
 
 ## Honest scope
 
-**THIS IS:** a 127.0.0.1 process with APG on every ingress, default-off
-bearers, a visible outbox, declared tethers, PHOENIX-LOCK (local wait /
+**THIS IS:** a 127.0.0.1 process with APG on every ingress, unarmed
+bearers until fabric enable (then RF / BT / Wi-Fi / photon **armed
+ON**), a visible outbox, declared tethers, PHOENIX-LOCK (local wait /
 re-seal after poison or isolation; not public hostname restore),
 QNM-S (score never reads views), medium-independent pair-ids that
 forward only along existing spiderweb edges, a sibling `qnsd`
 process where the photon is the packet and restriction walks the next
-via class in one program, and a local fabric pipeline
+via class in one program, persist-across-device cold copies (laptop /
+phone / watch / radio / bluetooth), an internal bitmesh geohash plane
+(not public ACT-RECEIPT geo), and a local fabric pipeline
 (ingress → APG → tip/dwell/claim strangers → walker → translate →
 outbox → cold-copy / phoenix / reheal / re-expand).
 
@@ -42,20 +47,22 @@ or a call into AZ Generator.
 
 | Kind | What |
 |------|------|
-| **REAL** | Local 127.0.0.1 process. APG refuse-first. Split-wires tip + dwell clocks. Photon (`QNS1` 1.3). Walker + translate. Outbox / receipts / chain on disk. Cold copies, archive re-expand, own-tip reheal, phoenix-WAIT. Loopback bind. Radio and remote bearers stay off. |
-| **MOCK** | Bluetooth, RF, and camera/emitter **device hooks**. Protocol-complete (`ViaAdapter`). Invented live hardware is forbidden. PLC is software-declared (no invented PHY). |
-| **LAW** | CROSS-NETWORK-SURVIVAL / REHEAL / SPLIT-WIRES / COLD-COPY / NO-LIE / NO-REWRITE / QNS-CD / FABRIC-MESH-PIPELINE. `GET /v1/mesh` never enables. No Softwares-tab product. Identity Aziel Eliab only. |
+| **REAL** | Local 127.0.0.1 process. APG refuse-first. Split-wires tip + dwell clocks. Photon (`QNS1` 1.3) codec + walker + translate. Outbox / receipts / chain on disk. Cold copies, multi-device persist/transfer, archive re-expand, own-tip reheal, phoenix-WAIT. Loopback bind. Remote bearer stays off. |
+| **MOCK / HOOK-PENDING** | Bluetooth, RF, Wi-Fi, and camera/emitter **device hooks**. Protocol-complete (`ViaAdapter`). Invented live hardware is forbidden. Fabric enable **arms** these channels; emit without a PHY driver is `QNS-HOOK-PENDING`, not a live packet. PLC is software-declared (no invented PHY). |
+| **LAW** | CROSS-NETWORK-SURVIVAL / REHEAL / SPLIT-WIRES / COLD-COPY / NO-LIE / NO-REWRITE / QNS-CD / FABRIC-MESH-PIPELINE ALL-CHANNELS-ON. Internal bitmesh geo only — public receipts stay no user/geo. `GET /v1/mesh` never enables. No Softwares-tab product. AZ Generator is not called from qnm. Identity Aziel Eliab only. |
 
 MirageGrid **Node Gate** is an **outward claim surface** fed by a
 deep-node AZ Generator. That generator is **not called** from qnm.
 Node Gate is a MirageGrid subsystem only. Its claim clock is an
 **external stranger** to qnm tip and dwell clocks. qnm stays local
-fabric. Radios stay mock / default-off. Phoenix does not restore a
+fabric. Channels arm ON when fabric-enabled; PHY hooks stay
+HOOK-PENDING until a real driver binds. Phoenix does not restore a
 public hostname.
 
 ## Bulletproof law (QNM-BUILD-1.0)
 
-- Local modules run **radios off**
+- Local modules run **radios off** until fabric enable; then **armed**
+  (HOOK-PENDING, not a live RF mesh claim)
 - Receipts to **disk** (`data/receipts/`, `data/chain/`)
 - Poison **refused, not interpreted**
 - Tamper **isolates**
@@ -156,7 +163,9 @@ Local API binds **127.0.0.1:8891** only:
 | `POST /local/survive` | Public network dead; local verify / append / archive |
 | `GET/POST /local/nolie` | No-lie / no-rewrite status; receipts still hash |
 | `POST /local/rewrite` | Always refused (`QNM-NO-REWRITE`) |
-| `GET/POST /local/fabric` | Pipeline status / one local pass (never calls AZ Generator) |
+| `GET/POST /local/fabric` | Pipeline status / enable (arms channels) / one local pass (never calls AZ Generator) |
+| `POST /local/persist` | Multi-device vault-on-transfer (laptop / phone / watch / radio / bluetooth) |
+| `GET/POST /local/bitmesh` | Internal geohash bind (not public ACT-RECEIPT geo) |
 
 `qnsd` adds `POST /local/policy` and `POST /local/declare` on the same
 loopback bind (port from `cfg/node.json`, default 8891).
@@ -164,15 +173,16 @@ loopback bind (port from `cfg/node.json`, default 8891).
 ## QNS-CD-1.0 (local qnsd)
 
 Photon is the packet (`QNS1` ver 1.3). QNS is the native medium. Light
-is camera-flash OCC. `VIA_ORDER` = lan, plc, bt, rf, light, qns,
+is camera-flash OCC. `VIA_ORDER` = lan, wifi, plc, bt, rf, light, qns,
 operator, local. `local` + `qns` + `operator` are always PRESENT
-(software). rf / plc / light need declare. Restriction walks the next
-class automatically. `force_via` waits — no silent remap. Packet id
-does not change across hops. Sticky-via is banned. SEAL does not
-require OS BT / Wi-Fi.
+(software). rf / plc / light / wifi need declare unless fabric-armed.
+Restriction walks the next class automatically. `force_via` waits —
+no silent remap. Packet id does not change across hops. Sticky-via is
+banned. SEAL does not require OS BT / Wi-Fi.
 
-Device hooks for Bluetooth, RF, and camera may be **mock-backed** and
-still implement `ViaAdapter`. See [docs/QNS-CD-1.0.md](docs/QNS-CD-1.0.md)
+Device hooks for Bluetooth, RF, Wi-Fi, and camera may be
+**HOOK-PENDING** and still implement `ViaAdapter`. Photon codec is
+REAL. See [docs/QNS-CD-1.0.md](docs/QNS-CD-1.0.md)
 (PDF companion noted there; Worker does not serve it).
 
 ## Layout
@@ -181,12 +191,12 @@ still implement `ViaAdapter`. See [docs/QNS-CD-1.0.md](docs/QNS-CD-1.0.md)
 qnm/                 boot, node, chain, apg, bearers, outbox,
                      phoenix, score, memorial, tethers,
                      pairs, spiderweb, wires, coldcopy, archive,
-                     nolie, fabric
+                     nolie, fabric, bitmesh
 qnsd/                QNS-CD-1.0 daemon: photon, walker, vias, light,
                      azpipe, policy, sanitize, api (127.0.0.1)
 modules/anon-broadcast/   loopback-only style tool (never a publish path)
 cfg/node.json
-data/{chain,locks,outbox,receipts,witness,vault,archive}
+data/{chain,locks,outbox,receipts,witness,vault,archive,bitmesh}
 docs/QNM-BUILD-1.0.md
 docs/AIH-WP-1.3.md
 docs/QNS-CD-1.0.md   (+ PDF companion note)

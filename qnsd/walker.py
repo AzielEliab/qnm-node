@@ -15,7 +15,16 @@ from qnsd.policy import Policy
 from qnsd.sanitize import sanitize_photon
 from qnsd.translate import apply as translate_apply
 from qnsd.vias import ADAPTERS, VIA_ORDER
-from qnsd.vias.base import ABSENT, FAIL, PERM, PROBE, ViaAdapter, ViaContext, ViaResult
+from qnsd.vias.base import (
+    ABSENT,
+    FAIL,
+    HOOK_PENDING,
+    PERM,
+    PROBE,
+    ViaAdapter,
+    ViaContext,
+    ViaResult,
+)
 
 NO_EMIT = ("ISOLATED", "PHOENIX_LOCK", "SCORCHED")
 
@@ -144,7 +153,7 @@ class ViaStack:
                 if restricted:
                     return self._wait(body, name, "force_via restricted; perm")
                 continue
-            if emitted.kind in (FAIL, ABSENT):
+            if emitted.kind in (FAIL, ABSENT, HOOK_PENDING):
                 if restricted:
                     return self._wait(body, name, "force_via restricted; no silent remap")
                 continue

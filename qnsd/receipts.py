@@ -10,6 +10,7 @@ import json
 from pathlib import Path
 from typing import Any
 
+from qnm.bitmesh import refuse_public_geo
 from qnsd.boot import AUTHOR, SPEC
 from qnsd.chain import Chain
 
@@ -29,6 +30,7 @@ class Receipts:
             return None
         if body.get("skip_receipt") and kind in ("fold", "azpipe-fold"):
             return None
+        refuse_public_geo(body)
         link = self.chain.append(kind, body)
         receipt = {
             "kind": kind,

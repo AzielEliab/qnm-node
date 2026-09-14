@@ -3,25 +3,31 @@
 Ingress → APG → tip/dwell/claim strangers → via walker → photon
 translate → outbox → cold-copy / phoenix / reheal / re-expand.
 
+Operator override (ALL-CHANNELS-ON): when fabric is enabled, RF,
+Bluetooth, Wi-Fi, and photon/QNS1 light are **armed ON**, plus
+lan/plc/operator/local. PHY without a real driver stays
+HOOK-PENDING — no invented live-link success.
+
 qnm-node never calls AZ Generator. Node Gate is a MirageGrid
-subsystem only (outward claim surface). Radios stay off. Physical
-vias may be protocol-complete mocks.
+subsystem only (outward claim surface). GET /v1/mesh never enables
+suite radios. Public receipts stay no user/geo.
 
 Author: Aziel Eliab only.
 """
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
 from typing import Any
 
+from qnm.bitmesh import refuse_public_geo
 from qnm.boot import AUTHOR, SPEC, QNMRefuse
 from qnm.wires import DWELL_CLOCK, DWELL_SOCKET, TICK_CLOCK, TICK_SOCKET
+from qnsd.vias import CHANNELS_ON, DECLARE_REQUIRED, PHYSICAL_HOOK, VIA_ORDER
 
 FABRIC_SPEC = "FABRIC-MESH-PIPELINE-1.0"
-VIA_ORDER = ("lan", "plc", "bt", "rf", "light", "qns", "operator", "local")
-DECLARE_REQUIRED = ("rf", "plc", "light")
 ALWAYS_PRESENT = ("local", "qns", "operator")
-PHYSICAL_MOCK = ("bt", "rf", "light")
 
 CLAIM_CLOCK = "miragegrid_claim"
 CLAIM_SOCKET = "node_gate_front"
@@ -94,20 +100,66 @@ _CLOCKS = {
 
 
 class Fabric:
-    """Local fabric law. Does not open radios. Does not call MirageGrid."""
+    """Local fabric law. Arms channels when enabled. Does not call MirageGrid."""
+
+    def __init__(self, root: Path | None = None) -> None:
+        self.enabled = False
+        self.root = Path(root) if root is not None else None
+        if self.root is not None:
+            self._load()
+
+    def _lock_path(self) -> Path | None:
+        if self.root is None:
+            return None
+        path = self.root / "data" / "locks" / "fabric.json"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        return path
+
+    def _load(self) -> None:
+        path = self._lock_path()
+        if path is None or not path.is_file():
+            return
+        data = json.loads(path.read_text(encoding="utf-8"))
+        self.enabled = bool(data.get("enabled"))
+
+    def _persist(self) -> None:
+        path = self._lock_path()
+        if path is None:
+            return
+        path.write_text(
+            json.dumps(
+                {
+                    "enabled": self.enabled,
+                    "spec": FABRIC_SPEC,
+                    "author": AUTHOR,
+                    "channels_on": list(CHANNELS_ON) if self.enabled else [],
+                },
+                sort_keys=True,
+                indent=2,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
 
     def status(self) -> dict[str, Any]:
+        phy: dict[str, str] = {}
+        for name in PHYSICAL_HOOK:
+            phy[name] = "HOOK-PENDING" if self.enabled else "mock"
         return {
             "ok": True,
             "spec": FABRIC_SPEC,
             "build": SPEC,
             "author": AUTHOR,
+            "enabled": self.enabled,
             "stages": list(STAGES),
             "via_order": list(VIA_ORDER),
             "declare_required": list(DECLARE_REQUIRED),
             "always_present": list(ALWAYS_PRESENT),
-            "physical_vias": {name: "mock" for name in PHYSICAL_MOCK},
-            "radios": "off",
+            "channels_on": list(CHANNELS_ON) if self.enabled else [],
+            "all_channels_on": self.enabled,
+            "physical_vias": phy,
+            "photon": "REAL",
+            "radios": "armed" if self.enabled else "off",
             "remote_bearer": False,
             "bind": "127.0.0.1",
             "sticky_via": False,
@@ -118,7 +170,12 @@ class Fabric:
             "call_az_generator": False,
             "public_qnsd_proxy": False,
             "live_rf_mesh": False,
+            "live_bt_link": False,
+            "live_wifi_link": False,
+            "live_flash": False,
             "public_hostname_restore": False,
+            "bitmesh_geo": "internal-only",
+            "public_receipt_geo": False,
             "clocks": {
                 "tick": TICK_CLOCK,
                 "dwell": DWELL_CLOCK,
@@ -138,6 +195,30 @@ class Fabric:
                 "stand_back_call": False,
             },
         }
+
+    def enable(self, node: Any | None = None) -> dict[str, Any]:
+        """Arm RF / BT / Wi-Fi / photon plus lan/plc/operator/local."""
+        self.enabled = True
+        if node is not None:
+            self.root = Path(getattr(node, "root", self.root or Path.cwd()))
+            if hasattr(node.bearers, "arm_fabric"):
+                node.bearers.arm_fabric()
+            if getattr(node, "qnsd", None) is not None and hasattr(node.qnsd, "arm_fabric"):
+                node.qnsd.arm_fabric()
+        self._persist()
+        snap = self.status()
+        if node is not None and hasattr(node, "_write_receipt"):
+            node._write_receipt(
+                "fabric_enable",
+                {
+                    "enabled": True,
+                    "channels_on": list(CHANNELS_ON),
+                    "radios": "armed",
+                    "live_rf_mesh": False,
+                    "az_generator": False,
+                },
+            )
+        return snap
 
     def refuse_az_generator(self, *_args: object, **_kwargs: object) -> None:
         raise QNMRefuse(
@@ -207,7 +288,8 @@ class Fabric:
         }
 
     def refuse_payload(self, payload: dict[str, Any]) -> None:
-        """Refuse generator / gate / mesh-enable / public-proxy acts."""
+        """Refuse generator / gate / mesh-enable / public-proxy / public-geo acts."""
+        refuse_public_geo(payload)
         keys = {str(key).lower() for key in payload}
         op = str(payload.get("op") or payload.get("action") or "").lower()
         if op in ("az_generator", "call_az_generator") or keys & {
@@ -242,9 +324,10 @@ class Fabric:
         """One local pipeline pass. Does not call AZ Generator."""
         walked: list[str] = []
         if isinstance(raw, dict):
+            op = str(raw.get("op") or raw.get("action") or "")
+            if op == "enable":
+                return self.enable(node)
             self.refuse_payload(raw)
-            import json
-
             body = json.dumps(raw, sort_keys=True, separators=(",", ":")).encode("utf-8")
         elif isinstance(raw, str):
             body = raw.encode("utf-8")
@@ -259,7 +342,10 @@ class Fabric:
         self.refuse_shared_clock(DWELL_CLOCK, DWELL_SOCKET)
 
         via_out: dict[str, Any] | None = None
-        if qnsd is not None and (
+        seated = qnsd if qnsd is not None else getattr(node, "qnsd", None)
+        if seated is not None:
+            seated.fabric_armed = self.enabled
+        if seated is not None and (
             payload.get("forward")
             or payload.get("photon")
             or str(payload.get("op") or "") == "forward"
@@ -268,7 +354,7 @@ class Fabric:
             inner = dict(payload.get("payload") or payload.get("photon") or {})
             if "op" not in inner:
                 inner = {"op": "note", "text": str(payload.get("text") or "fabric")}
-            via_out = qnsd.forward(
+            via_out = seated.forward(
                 dest,
                 inner,
                 via=via if via in VIA_ORDER else None,
@@ -286,6 +372,7 @@ class Fabric:
                     "via": via,
                     "az_generator": False,
                     "node_gate": False,
+                    "persist": True,
                 },
             )
             walked.append("outbox")
@@ -303,11 +390,13 @@ class Fabric:
             "call_az_generator": False,
             "claim_clock": CLAIM_CLOCK,
             "claim_is_stranger": True,
-            "radios": "off",
+            "enabled": self.enabled,
+            "radios": "armed" if self.enabled else "off",
+            "live_rf_mesh": False,
             "spec": FABRIC_SPEC,
             "author": AUTHOR,
             "state": getattr(node, "state", ""),
         }
         if hasattr(node, "_write_receipt"):
-            node._write_receipt("fabric", {"stages": walked, "via": via})
+            node._write_receipt("fabric", {"stages": walked, "via": via, "enabled": self.enabled})
         return receipt

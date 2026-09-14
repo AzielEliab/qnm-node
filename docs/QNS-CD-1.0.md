@@ -48,7 +48,7 @@ Anon-broadcast stays a loopback sibling — never a publish path.
 ```
 qnsd/{boot,node,photon,outbox,walker,translate,apg,azpipe,
       chain,receipts,pairs,memorial,policy,api}.py
-qnsd/vias/{base,lan,plc,bt,rf,light,qns,operator,local}.py
+qnsd/vias/{base,lan,wifi,plc,bt,rf,light,qns,operator,local}.py
 qnsd/light/{codec,camera,emitter}.py
 qnm/                 QNM-BUILD-1.0 (reused; not replaced)
 modules/anon-broadcast/   loopback sibling — never a publish path
@@ -108,23 +108,26 @@ enter `photon_id`. Admit on one class and emit on another sets
 ## §8 Vias
 
 ```
-VIA_ORDER = lan, plc, bt, rf, light, qns, operator, local
+VIA_ORDER = lan, wifi, plc, bt, rf, light, qns, operator, local
 ```
 
 Every module implements `ViaAdapter` (Protocol): `presence`, `admit`,
-`emit`. All eight are importable.
+`emit`. All nine are importable.
 
 | Class | Presence |
 |-------|----------|
 | `local`, `qns`, `operator` | always PRESENT (software) |
 | `lan`, `bt` | PRESENT (software). LAN emit fails without a declared link. |
-| `plc` | ABSENT without declared `domain` |
-| `rf` | ABSENT without declared `profile` |
-| `light` | ABSENT without declare. Camera deny is PERM (walk next). |
+| `wifi` | ABSENT without declare unless fabric-armed |
+| `plc` | ABSENT without declared `domain` unless fabric-armed |
+| `rf` | ABSENT without declared `profile` unless fabric-armed |
+| `light` | ABSENT without declare unless fabric-armed. Camera deny is PERM (walk next). |
 
-Device hooks (`bt`, `rf`, camera, emitter) may be mock-backed. The
-Protocol is real. Sticky-via is banned — the last success is never the
-next default.
+Device hooks (`bt`, `rf`, `wifi`, camera, emitter) may be
+**HOOK-PENDING**. The Protocol is real. Photon / QNS1 light codec is
+**REAL**. Invented live-link success is forbidden. Sticky-via is
+banned — the last success is never the next default. Fabric enable
+arms RF / BT / Wi-Fi / photon.
 
 **Restriction.** COLD → local only. `always_try` walks `VIA_ORDER`; a
 fail / absent / PERM advances to the next class **inside the same
@@ -202,7 +205,7 @@ No `/mesh` enable. No Node Gate. Faces do not proxy this port.
 
 | # | Law |
 |---|-----|
-| 1 | All eight vias import + Protocol |
+| 1 | All nine vias import + Protocol |
 | 2 | COLD walker only local |
 | 3 | LIVE + always_try walks lan fail → next class without a second API call |
 | 4 | force_via restricted ⇒ wait, no silent remap |

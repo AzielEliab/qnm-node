@@ -19,7 +19,9 @@ Python 3.10+. Core is stdlib only. pytest is the dev extra. No network.
 ## Ground rules (QNM-BUILD-1.0 + AIH-WP-1.3 + QNS-CD-1.0)
 
 1. **Identity is Aziel Eliab only.**
-2. Radios stay off. Local API binds 127.0.0.1 only.
+2. Radios stay off until fabric enable; then armed (HOOK-PENDING, not
+   invented live PHY). Local API binds 127.0.0.1 only. GET /v1/mesh
+   never enables.
 3. Receipts go to disk. Chain is append-only.
 4. Poison is refused, not interpreted (APG).
 5. Tamper isolates. No auto-heal.
@@ -45,9 +47,10 @@ Python 3.10+. Core is stdlib only. pytest is the dev extra. No network.
     Copies not all on one tunnel. Network never lies to stay alive,
     adapt, or prevent death. There is no rewrite key.
 17. Fabric pipeline stays local. Do not add a call-AZ-Generator path.
-    Node Gate is MirageGrid only (outward claim stranger). Radios
-    mock / default-off. No public hostname restore. No public qnsd
-    proxy. Via payloads sanitize-refuse.
+    Node Gate is MirageGrid only (outward claim stranger). Fabric
+    enable arms RF / BT / Wi-Fi / photon; PHY hooks stay HOOK-PENDING.
+    Public receipts stay no user/geo. No public hostname restore. No
+    public qnsd proxy. Via payloads sanitize-refuse.
 
 ## License of contributions
 

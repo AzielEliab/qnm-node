@@ -16,7 +16,7 @@ Companion to `QNM-BUILD-1.0.md` and `AIH-WP-1.3.md`.
 | [CROSS-NETWORK-SURVIVAL-1.0](./CROSS-NETWORK-SURVIVAL-1.0.md) | If network + live data die, chain survives (cold copy / re-expand / self-reheal) |
 | [NO-LIE-1.0](./NO-LIE-1.0.md) | Network never lies, even to stay alive / adapt / prevent death; receipts still hash; verify without voice |
 | [NO-REWRITE-1.0](./NO-REWRITE-1.0.md) | No rewrite key; published tip immutable; copies not all on one tunnel |
-| [FABRIC-MESH-PIPELINE-1.0](./FABRIC-MESH-PIPELINE-1.0.md) | Local ingress → APG → stranger clocks → via walker → photon → outbox → survival; MirageGrid Node Gate is an external claim stranger |
+| [FABRIC-MESH-PIPELINE-1.0](./FABRIC-MESH-PIPELINE-1.0.md) | Local ingress → APG → stranger clocks → via walker → photon → outbox → survival; ALL-CHANNELS-ON when fabric-enabled; internal bitmesh geo; MirageGrid Node Gate is an external claim stranger |
 
 QNM-WP-1.0 absorbs BUILD+TOPO: local process ON, public rollup OFF and
 dies with the pull; GET /v1/mesh never enables. Phoenix is wait /
@@ -32,5 +32,7 @@ Print companion: `QNS-CD-1.0.pdf` (git-hosted; Worker does not serve).
 
 FABRIC-MESH-PIPELINE-1.0 locks the local order (APG → wires → vias →
 photon → outbox → phoenix / reheal / cold-copy). MirageGrid claim
-clock is an external stranger to qnm tip and dwell clocks. Physical
-Bluetooth / RF / light hooks stay honest mocks.
+clock is an external stranger to qnm tip and dwell clocks. When
+fabric-enabled, RF / BT / Wi-Fi / photon arm ON. Physical Bluetooth /
+RF / Wi-Fi / camera hooks stay HOOK-PENDING until a PHY binds. Public
+receipts stay no user/geo.
