@@ -79,7 +79,9 @@ The outbox keeps the frame. Waiting is not death
 ## §7 Isolation still cuts
 
 Isolation cuts **all** pair edges on that node. PHOENIX-LOCK and Scorch
-do the same. Poison and tamper do **not** ride the spiderweb.
+do the same. PHOENIX-LOCK is wait / re-seal after poison or isolation —
+not restore of a public hostname. Public tunnels and sites die with the
+pull. Poison and tamper do **not** ride the spiderweb.
 
 Tethers (AIH-WP-1.1 declared corridors) stay a separate ledger.
 
@@ -89,7 +91,8 @@ Tethers (AIH-WP-1.1 declared corridors) stay a separate ledger.
 - AnonBroadcast is still never a publish path.
 - Local API binds **127.0.0.1** only.
 - QNM bulletproof law is unchanged (radios off, receipts to disk,
-  no auto-heal, no account resurrection, score never reads views).
+  no auto-heal, no account resurrection, score never reads views,
+  Phoenix wait / re-seal not public hostname restore).
 - AZHub and AZInterface remain separate software (AIH-WP-1.1).
 
 ## §9 Local API (added)

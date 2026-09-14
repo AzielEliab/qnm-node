@@ -1,7 +1,12 @@
 """PHOENIX-LOCK — QNM-BUILD-1.0 §11.
 
-Waits locally. Does not hunt a controller. Does not open radios.
+Wait / re-seal after poison or isolation. Does not hunt a controller.
+Does not open radios. Does not restore a public hostname, .uk,
+Cloudflare tunnel, Worker, or public rollup. Public tunnels and sites
+die with the pull.
+
 Arm is an operator act. After arm, the node stays on this machine.
+Mesh does not climb back onto the public hostname by itself.
 """
 
 from __future__ import annotations
@@ -26,7 +31,8 @@ class Phoenix:
     def hunt_controller(self) -> None:
         raise QNMRefuse(
             "QNM-PHOENIX-LOCAL-WAIT",
-            "PHOENIX-LOCK waits locally; no controller hunt",
+            "PHOENIX-LOCK waits / re-seals locally; no controller hunt; "
+            "no public hostname restore",
         )
 
     def status(self) -> dict[str, Any]:

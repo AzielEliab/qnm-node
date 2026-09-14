@@ -3,9 +3,12 @@
 State: COLD → LOCAL → LIVE (operator bearer) → DEGRADED → ISOLATED
 → PHOENIX_LOCK → SCORCHED.
 
-No auto-heal. No LIVE from site ping. Local API binds 127.0.0.1 only.
-Receipts go to disk. Radios stay off. Pair-id is medium-independent
-(AIH-WP-1.3). Isolation cuts pair edges. Not Bell-pair physics.
+No auto-heal. No LIVE from site ping. PHOENIX-LOCK waits / re-seals
+locally after poison or isolation — it does not restore a public
+hostname. Public tunnels and sites die with the pull. Local API binds
+127.0.0.1 only. Receipts go to disk. Radios stay off. Pair-id is
+medium-independent (AIH-WP-1.3). Isolation cuts pair edges. Not
+Bell-pair physics.
 """
 
 from __future__ import annotations
@@ -290,6 +293,7 @@ class Node:
         return {"ok": True, "tamper": False, "chain": verified}
 
     def arm_phoenix(self) -> dict[str, Any]:
+        """Wait / re-seal locally. Does not restore a public hostname."""
         self._require_not_scorched()
         self.phoenix.arm()
         self._advance("PHOENIX_LOCK")

@@ -21,7 +21,8 @@ Aziel Eliab only. No other author name. No account object. A node is an
 - Receipts go to **disk**.
 - Poison is **refused, not interpreted**.
 - Tamper **isolates**.
-- **PHOENIX-LOCK** waits locally. No controller hunt.
+- **PHOENIX-LOCK** waits / re-seals locally after poison or isolation.
+  No controller hunt. **Not** public hostname restore.
 - Tethers **drop clean**.
 - **No account resurrection**.
 - AnonBroadcast is **never a publish path**.
@@ -55,8 +56,10 @@ Two installs produce two roots. Resume is allowed **only** from
 COLD → LOCAL → LIVE(operator bearer) → DEGRADED → ISOLATED → PHOENIX_LOCK → SCORCHED
 ```
 
-Forward-only. **No auto-heal.** **No LIVE from site ping.** Local API
-binds **127.0.0.1** only:
+Forward-only. **No auto-heal.** **No LIVE from site ping.**
+**PHOENIX-LOCK** is wait / re-seal — not restore of a public hostname,
+`.uk`, tunnel, or Worker rollup. Public tunnels and sites **die with
+the pull**. Local API binds **127.0.0.1** only:
 
 `/local/boot` `/local/state` `/local/bearer` `/local/tether`
 `/local/pair` `/local/pairs` `/local/forward`
@@ -91,8 +94,18 @@ See [AIH-WP-1.3.md](AIH-WP-1.3.md).
 
 ## §11 PHOENIX-LOCK
 
-Operator arm. The node waits on this machine. `hunt_controller` is
-refused (`QNM-PHOENIX-LOCAL-WAIT`).
+Operator arm. Wait / re-seal after poison or isolation. The node waits
+on this machine. `hunt_controller` is refused (`QNM-PHOENIX-LOCAL-WAIT`).
+
+Phoenix does **not** restore a public hostname, `.uk`, Cloudflare
+tunnel, Worker, or public rollup. It is not “bring the public node
+back.” Public tunnels and sites **die with the pull**: a Cloudflare
+Tunnel lives on token + DNS name + account; pull site / revoke token /
+drop Worker / kill DNS → `cloudflared` has nowhere legal to land.
+Restarting `cloudflared` is operator kit, not this contract, and fails
+if credential or hostname is gone. After a pull, public rollup is
+down. The local node may keep verifying and appending. Mesh does not
+climb back onto the public hostname by itself. No controller hunt.
 
 ## §12 Score (QNM-S)
 
@@ -112,7 +125,7 @@ clears tethers and outbox. `account_resurrect` / `account_restore` /
 | `tests/test_offline.py` | Radios off; two roots; resume locks only; no LIVE from ping; no auto-heal; receipts on disk; 127.0.0.1 API |
 | `tests/test_apg.py` | Every ingress through APG; poison refused not interpreted |
 | `tests/test_tamper.py` | Tamper isolates; no auto-heal out of ISOLATED |
-| `tests/test_phoenix.py` | PHOENIX-LOCK waits locally; no controller hunt |
+| `tests/test_phoenix.py` | PHOENIX-LOCK waits / re-seals locally; no controller hunt; not public hostname restore |
 | `tests/test_tether.py` | Tethers drop clean |
 | `tests/test_no_account.py` | No account resurrection; identity Aziel Eliab; score ignores views; anon-broadcast never publishes |
 | `tests/test_spiderweb.py` | AIH-WP-1.3: pair survives bearer off; forward along spiderweb with APG; isolated node has no edges; hop_max / loop drop |

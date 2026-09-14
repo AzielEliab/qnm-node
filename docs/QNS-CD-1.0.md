@@ -77,7 +77,10 @@ or LIVE.
 COLD → LOCAL → LIVE → DEGRADED → ISOLATED → PHOENIX_LOCK → SCORCHED
 ```
 
-Forward-only. **No auto-heal.** **No LIVE from site ping.** LIVE is an
+Forward-only. **No auto-heal.** **No LIVE from site ping.**
+**PHOENIX-LOCK** is wait / re-seal after poison or isolation — not
+restore of a public hostname. Public tunnels and sites **die with the
+pull**. LIVE is an
 operator act (`POST /local/policy` with `operator: true` or declare
 `operator`). COLD walker may use **local** only.
 
@@ -177,7 +180,7 @@ Binds **127.0.0.1 only**. Port from `cfg/node.json` (default **8891**).
 | `GET /local/outbox` | Visible queue |
 | `POST /local/outbox/cut` | Drop one item |
 | `GET /local/receipts` | Disk receipts |
-| `POST /local/phoenix/arm` | Wait locally |
+| `POST /local/phoenix/arm` | Wait / re-seal locally (not public hostname restore) |
 
 No `/mesh` enable. No Node Gate. Faces do not proxy this port.
 

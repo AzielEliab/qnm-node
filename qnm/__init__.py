@@ -4,7 +4,8 @@ Companion pair-bind: AIH-WP-1.3 (medium-independent spiderweb).
 Hub / Interface law remains AIH-WP-1.1. Author: Aziel Eliab only.
 
 Local process. Radios off. Receipts to disk. Poison refused, not
-interpreted. Tamper isolates. PHOENIX-LOCK waits locally. Tethers drop
+interpreted. Tamper isolates. PHOENIX-LOCK waits / re-seals locally
+after poison or isolation (not public hostname restore). Tethers drop
 clean. No account resurrection. AnonBroadcast is never a publish path.
 No Lumen/Mandible live symbols. No lattice_online / mesh_complete.
 Score never reads views. Pair-id is medium-independent — not Bell-pair

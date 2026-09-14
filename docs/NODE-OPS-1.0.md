@@ -12,12 +12,13 @@ NODE-OPS-1.0                                                                    
 Node operations and security framework
 NODE-OPS-1.0 · review of github.com/AzielEliab · 2026-09-06 · Aziel Eliab
 
-   Bulletproof here means smallest public surface, named refuses, isolate-then-phoenix, no auto-heal onto a
-   poisoned ID. It does not mean an unbreakable host.
+   Bulletproof here means smallest public surface, named refuses, isolate-then-phoenix wait / re-seal, no
+   auto-heal onto a poisoned ID, and public tunnels / sites that die with the pull. It does not mean an
+   unbreakable host or a hostname that climbs back.
 
 1. Fleet review (2026-09-06)
 Public repos already point the right way: FragGate hashed registry and refuse ledger; corpus security headers; runtime thin
-MCP; qnm-node on 127.0.0.1 with APG, PHOENIX-LOCK wait, no account resurrection, no auto-heal; ARK
+MCP; qnm-node on 127.0.0.1 with APG, PHOENIX-LOCK wait / re-seal, no account resurrection, no auto-heal; ARK
 hosted-never-unlocks; azos/exec stub; MirageGrid hop stubs; AZMail smtp/login stubs. Gaps: BUILD-1.0 docs still say
 bearers default-off (amend per QNM-WP-1.0: process ON, public rollup); cell-of-25 dual-bridge rotation not fleet-wired;
 Q×act seal not yet the only legal success path on every fraggate_call.
@@ -25,7 +26,9 @@ Q×act seal not yet the only legal success path on every fraggate_call.
 2. Node classes
   Class                Fleet                                   Public surface allowed
 
-  Face                 azieleliab, corpus, godlock             Pages, cite, llms, software mirror. No Node Gate. No vault unlock.
+  Face                 azieleliab, corpus, godlock             Pages, cite, llms, software mirror while the site exists.
+                                                               Pull site / revoke token / drop Worker / kill DNS → the
+                                                               public face dies with the pull. Phoenix does not restore it.
 
   Door                 fraggate, aziel-runtime                 Thin MCP + fraggate_call. GET /v1/mesh never enables.
 
@@ -53,21 +56,30 @@ Q×act seal not yet the only legal success path on every fraggate_call.
   • No credentials in process state. token_present only. No browser login.
   • No public enable switch. GET does not change mesh state.
   • qnm-node binds 127.0.0.1. Faces do not proxy that port.
-  • No vault on the Worker. No auto-heal to a spent mesh_id.
+  • Public tunnels and sites DIE WITH THE PULL. A Cloudflare Tunnel lives on token + DNS
+    name + account. Pull site / revoke token / drop Worker / kill DNS → cloudflared has
+    nowhere legal to land. Restarting cloudflared is operator kit, not this contract; it
+    fails if credential or hostname is gone.
+  • No vault on the Worker. No auto-heal to a spent mesh_id. No public hostname restore.
   • No account resurrection. Memorial keeps the spend.
   • Identity lock on export. Publish only via official API + AZBOT_PUBLISH=1.
   • Local HTTP keeps nosniff, DENY frames, no-referrer, camera/mic/geo off, tight CSP.
 
-4. Phoenix loop (failsafe)
-   live → APG miss or tamper → isolate (cut tethers, spend mesh_id) → memorial → PHOENIX-LOCK wait
-   (local, no controller hunt) → declare comms clean → assign new mesh_id → rejoin as leaf → seat a new
-   bridge pair if needed.
+4. Phoenix loop (wait / re-seal — not public restore)
+   live → APG miss or tamper → isolate (cut tethers, spend mesh_id) → memorial → PHOENIX-LOCK
+   wait / re-seal (local, no controller hunt). Stop there.
 
-  • This is not auto-heal. The old ID stays spent.
+  • Phoenix is wait / re-seal after poison or isolation. It is not “bring the .uk / public node
+    back.” It does not restore a public hostname, Cloudflare tunnel, Worker, or public rollup.
+  • This is not auto-heal. The old ID stays spent. No controller hunt.
+  • Sites pulled → public rollup down. Local node may keep verifying and appending.
+    Mesh does not climb back onto the public hostname by itself.
+  • A later local assign of a new mesh_id is a separate operator act on the local cell — not
+    Phoenix reseating the public name, not a failsafe that heals the pulled site.
 
 
 
-Node operations + surface law · phoenix loop · 2026-09-06                                                                                  page 1
+Node operations + surface law · phoenix wait / re-seal · 2026-09-06                                                                        page 1
 
 
 NODE-OPS-1.0                                                                                          Aziel Eliab · public work identity only
@@ -80,11 +92,12 @@ NODE-OPS-1.0                                                                    
   • Three missed heartbeats = suspect. Suspect + APG hit = isolate.
   • Bridge poison rotates both bridges before inter-cell traffic.
   • Held publish queue does not flush across phoenix without a new operator act.
+  • Phoenix does not un-pull a site, re-issue a tunnel token, or rewrite DNS.
 
 5. Per-class refuse (minimum)
   Class                  Must refuse
 
-  Face                   Node Gate, IP panel, vault unlock, mesh enable
+  Face                   Node Gate, IP panel, vault unlock, mesh enable, hostname resurrection
 
   Door                   Invented slugs, stub ops, runtime_run as agent default
 
@@ -114,7 +127,8 @@ sentence. No token body.
   • Public faces have no enable switch and no vault unlock.
   • Door stubs refuse and the refuse is a receipt.
   • qnm-node is not reachable off loopback in default config.
-  • Spent mesh_id rejected on rejoin. Phoenix wait has no outbound hunt packet.
+  • Spent mesh_id rejected on later local cell join. Phoenix wait has no outbound hunt packet.
+  • Phoenix does not restore a public hostname. Pulled sites stay down (die with the pull).
   • Held queue does not flush across phoenix without a new act.
   • ARK hosted unlock remains stub. Cell does not halt when one leaf isolates.
 Does not add a Node Gate to “see security.” Does not turn MirageGrid into a VPN. Does not publish exploit recipes. Public
@@ -125,4 +139,4 @@ identity: Aziel Eliab only.
 
 
 
-Node operations + surface law · phoenix loop · 2026-09-06                                                                             page 2
+Node operations + surface law · phoenix wait / re-seal · 2026-09-06                                                                   page 2

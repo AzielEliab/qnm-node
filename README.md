@@ -24,7 +24,8 @@ Local **qnsd owns vias**. Suite Workers **cite / proxy only**.
 ## Honest scope
 
 **THIS IS:** a 127.0.0.1 process with APG on every ingress, default-off
-bearers, a visible outbox, declared tethers, PHOENIX-LOCK (local wait),
+bearers, a visible outbox, declared tethers, PHOENIX-LOCK (local wait /
+re-seal after poison or isolation; not public hostname restore),
 QNM-S (score never reads views), medium-independent pair-ids that
 forward only along existing spiderweb edges, and a sibling `qnsd`
 process where the photon is the packet and restriction walks the next
@@ -40,7 +41,11 @@ or a qubit machine.
 - Receipts to **disk** (`data/receipts/`, `data/chain/`)
 - Poison **refused, not interpreted**
 - Tamper **isolates**
-- PHOENIX-LOCK **waits locally** (no controller hunt)
+- PHOENIX-LOCK **waits / re-seals locally** after poison or isolation
+  (no controller hunt; **not** public hostname restore)
+- Public tunnels and sites **die with the pull**. Mesh does not climb
+  back onto the public hostname by itself. Local node may keep
+  verifying and appending after a pull.
 - Tethers **drop clean**
 - **No account resurrection**
 - AnonBroadcast is **never a publish path**
@@ -80,7 +85,8 @@ Two installs → two roots. Resume only from `data/locks/`.
 COLD → LOCAL → LIVE(operator bearer) → DEGRADED → ISOLATED → PHOENIX_LOCK → SCORCHED
 ```
 
-No auto-heal. No LIVE from a site ping.
+No auto-heal. No LIVE from a site ping. Phoenix does not restore a
+public hostname, `.uk`, tunnel, or Worker rollup.
 
 ## Quick start
 
@@ -107,7 +113,7 @@ Local API binds **127.0.0.1:8891** only:
 | `POST /local/ingress` | APG then admit |
 | `GET /local/outbox` | Visible queue |
 | `POST /local/outbox/cut` | Drop one item |
-| `POST /local/phoenix/arm` | Wait locally |
+| `POST /local/phoenix/arm` | Wait / re-seal locally (not public hostname restore) |
 | `GET /local/receipts` | Disk receipts |
 
 `qnsd` adds `POST /local/policy` and `POST /local/declare` on the same
@@ -153,8 +159,9 @@ python -m pytest -q
 ```
 
 Offline. Covers radios-off / two roots / lock resume, APG poison,
-tamper isolate, PHOENIX-LOCK local wait, clean tether cut, no
-account resurrection, pair survives bearer off, spiderweb forward
+tamper isolate, PHOENIX-LOCK local wait / re-seal (not public hostname
+restore), clean tether cut, no account resurrection, pair survives
+bearer off, spiderweb forward
 with APG, isolated node has no edges, hop_max / loop drop, and QNS-CD
 via Protocol / walker / light OCC / lock-backed outbox wait / pair-cut
 emit stop.

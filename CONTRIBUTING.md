@@ -23,7 +23,9 @@ Python 3.10+. Core is stdlib only. pytest is the dev extra. No network.
 3. Receipts go to disk. Chain is append-only.
 4. Poison is refused, not interpreted (APG).
 5. Tamper isolates. No auto-heal.
-6. PHOENIX-LOCK waits locally. No controller hunt.
+6. PHOENIX-LOCK waits / re-seals locally after poison or isolation.
+   No controller hunt. Not public hostname restore. Public tunnels
+   and sites die with the pull.
 7. Tethers drop clean. No auto-rewire.
 8. No account resurrection.
 9. AnonBroadcast is never a publish path.
