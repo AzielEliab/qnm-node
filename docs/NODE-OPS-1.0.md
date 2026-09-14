@@ -97,6 +97,10 @@ NODE-OPS-1.0                                                                    
   • If the public network and live data die, the chain still survives
     (cold copies / archive re-expand / self-reheal). Local verify /
     append stay offline. Tips do not need the public network.
+  • No lie. The network never lies to stay alive, adapt, or prevent
+    death. Receipts still hash. Verify is without voice.
+  • No rewrite key. Published tip cannot be rewritten or mutated.
+    Copies are not all on one tunnel.
   • Bridge poison rotates both bridges before inter-cell traffic.
   • Held publish queue does not flush across phoenix without a new operator act.
   • Phoenix does not un-pull a site, re-issue a tunnel token, or rewrite DNS.
@@ -108,7 +112,8 @@ NODE-OPS-1.0                                                                    
 
   Door                   Invented slugs, stub ops, runtime_run as agent default
 
-  Fabric                 cell_full join, leaf as inter-cell path, spent ID reuse, public bind
+  Fabric                 cell_full join, leaf as inter-cell path, spent ID reuse, public bind,
+                         rewrite of published tip, rewrite key, lie-to-live heal, one-tunnel copies
 
   Survival               vpn / arm / mesh-join stubs; opening a public mesh because central is down
 
@@ -137,6 +142,8 @@ sentence. No token body.
   • Spent mesh_id rejected on later local cell join. Phoenix wait has no outbound hunt packet.
   • Phoenix does not restore a public hostname. Pulled sites stay down (die with the pull).
   • Offline verify / append still work after a public pull. require_public_network refuses.
+  • Receipts still hash. require_voice refused. rewrite / rewrite_key of a
+    published tip refused. lie-to-stay-alive heal refused. one-tunnel copies refused.
   • Held queue does not flush across phoenix without a new act.
   • ARK hosted unlock remains stub. Cell does not halt when one leaf isolates.
 Does not add a Node Gate to “see security.” Does not turn MirageGrid into a VPN. Does not publish exploit recipes. Public

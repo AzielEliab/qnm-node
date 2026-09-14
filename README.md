@@ -60,6 +60,10 @@ or a qubit machine.
 - **Cross-network survival:** if network + live data die, the chain still
   survives. Local verify / append stay offline. Tips do not need the
   public network
+- **No lie:** network never lies, even to stay alive, adapt, or prevent
+  death. Receipts still hash. Verify is without voice
+- **No rewrite:** no rewrite key. Published tip cannot be rewritten or
+  mutated. Copies are not all on one tunnel
 
 ## Pair-bind law (AIH-WP-1.3)
 
@@ -132,6 +136,8 @@ Local API binds **127.0.0.1:8891** only:
 | `POST /local/archive` | Pack / verify / re-expand chain bytes |
 | `POST /local/reheal` | Own last good tip, or phoenix-WAIT |
 | `POST /local/survive` | Public network dead; local verify / append / archive |
+| `GET/POST /local/nolie` | No-lie / no-rewrite status; receipts still hash |
+| `POST /local/rewrite` | Always refused (`QNM-NO-REWRITE`) |
 
 `qnsd` adds `POST /local/policy` and `POST /local/declare` on the same
 loopback bind (port from `cfg/node.json`, default 8891).
@@ -155,7 +161,8 @@ still implement `ViaAdapter`. See [docs/QNS-CD-1.0.md](docs/QNS-CD-1.0.md)
 ```
 qnm/                 boot, node, chain, apg, bearers, outbox,
                      phoenix, score, memorial, tethers,
-                     pairs, spiderweb, wires, coldcopy, archive
+                     pairs, spiderweb, wires, coldcopy, archive,
+                     nolie
 qnsd/                QNS-CD-1.0 daemon: photon, walker, vias, light,
                      azpipe, policy, api (127.0.0.1)
 modules/anon-broadcast/   loopback-only style tool (never a publish path)
@@ -181,7 +188,9 @@ restore), clean tether cut, no account resurrection, pair survives
 bearer off, spiderweb forward
 with APG, isolated node has no edges, hop_max / loop drop, and QNS-CD
 via Protocol / walker / light OCC / lock-backed outbox wait / pair-cut
-emit stop.
+emit stop. Also receipts-still-hash, verify-without-voice, no rewrite
+key, published-tip immutable, no one-tunnel copies, and no lie-to-live
+heal.
 
 ## Cite
 
@@ -194,6 +203,10 @@ https://github.com/AzielEliab/qnm-node
 
 Eliab, Aziel. (2026). QNS-CD-1.0 Quantum Node Signal Coding Design
 [Software]. Apache-2.0. https://github.com/AzielEliab/qnm-node
+
+Eliab, Aziel. (2026). NO-LIE-1.0 / NO-REWRITE-1.0 [Law].
+Companion: QNM-BUILD-1.0. Apache-2.0.
+https://github.com/AzielEliab/qnm-node
 
 Do not invent a DOI.
 

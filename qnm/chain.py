@@ -1,7 +1,7 @@
-"""Append-only local chain — QNM-BUILD-1.0 §8.
+"""Append-only local chain — QNM-BUILD-1.0 §8 / NO-REWRITE-1.0.
 
-Receipts live on disk under data/chain/. No rewrite. No remote tip.
-This is not lattice_online and not mesh_complete.
+Receipts live on disk under data/chain/. No rewrite. No rewrite key.
+No remote tip. This is not lattice_online and not mesh_complete.
 """
 
 from __future__ import annotations
@@ -145,3 +145,12 @@ class Chain:
             "tip": self.tip,
             "errors": errors,
         }
+
+    def rewrite(self, *_args: object, **_kwargs: object) -> None:
+        raise QNMRefuse("QNM-NO-REWRITE", "chain is append-only; no rewrite")
+
+    def mutate(self, *_args: object, **_kwargs: object) -> None:
+        raise QNMRefuse("QNM-NO-REWRITE", "chain is append-only; no mutate")
+
+    def rewrite_key(self, *_args: object, **_kwargs: object) -> None:
+        raise QNMRefuse("QNM-NO-REWRITE-KEY", "there is no rewrite key")

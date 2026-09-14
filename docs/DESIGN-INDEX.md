@@ -14,6 +14,8 @@ Companion to `QNM-BUILD-1.0.md` and `AIH-WP-1.3.md`.
 | [RE-EXPAND-1.0](./RE-EXPAND-1.0.md) | Archive bytes, not summaries; verify + new local node on tip |
 | [REHEAL-1.0](./REHEAL-1.0.md) | Own last good tip + trusted pull, or phoenix-WAIT; no neighbor / majority reheal |
 | [CROSS-NETWORK-SURVIVAL-1.0](./CROSS-NETWORK-SURVIVAL-1.0.md) | If network + live data die, chain survives (cold copy / re-expand / self-reheal) |
+| [NO-LIE-1.0](./NO-LIE-1.0.md) | Network never lies, even to stay alive / adapt / prevent death; receipts still hash; verify without voice |
+| [NO-REWRITE-1.0](./NO-REWRITE-1.0.md) | No rewrite key; published tip immutable; copies not all on one tunnel |
 
 QNM-WP-1.0 absorbs BUILD+TOPO: local process ON, public rollup OFF and
 dies with the pull; GET /v1/mesh never enables. Phoenix is wait /

@@ -106,9 +106,13 @@ QNM-WP-1.0                                                                      
    • Do not make tip preservation depend on a live Worker or public network.
      If network + live data die, the chain survives on cold copies / archive
      re-expand / self-reheal. Local verify / append stay offline.
+   • Do not lie to stay alive, adapt, or prevent death. Do not rewrite
+     or mutate a published tip. There is no rewrite key. Receipts still
+     hash. Verify is without voice. Copies are not all on one tunnel.
    • Concept is closed when both planes, cell math, ID spend, leaf-vs-bridge poison, phoenix wait / re-seal
      without hunt or hostname restore, die-with-pull, split-wires, cold-copy,
-     re-expand, reheal, cross-network survival, and stub names are specified — they are.
+     re-expand, reheal, cross-network survival, no-lie, no-rewrite,
+     and stub names are specified — they are.
  Specified 2026-09-06. Building qnm-node is implementation. This paper is the concept at 100%. Public identity: Aziel
  Eliab only.
 

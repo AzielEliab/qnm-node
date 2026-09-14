@@ -14,8 +14,11 @@ tip hash only; payloads are pull-only. Cold copies survive a public
 pull. Re-expand is archive verify plus a new local node on tip.
 Reheal is own last good tip, or phoenix-WAIT — not neighbor chatter.
 If the public network and live data die, the chain still survives
-(cold copies / archive re-expand / self-reheal). Public tunnels and
-sites die with the pull.
+(cold copies / archive re-expand / self-reheal). The network never
+lies, even to stay alive, adapt, or prevent death. No rewrite key.
+Published tip cannot be rewritten or mutated. Receipts still hash.
+Verify is without voice. Copies are not all on one tunnel.
+Public tunnels and sites die with the pull.
 """
 
 from __future__ import annotations
@@ -28,6 +31,7 @@ from qnm.node import STATES, Node
 from qnm.pairs import HOP_MAX_DEFAULT, compute_pair_id, handshake_seal
 from qnm.score import score_local
 from qnm.spiderweb import Spiderweb
+from qnm.nolie import NoLie
 from qnm.wires import Wires
 
 __version__ = "1.1.0"
@@ -39,6 +43,8 @@ __coldcopy__ = "COLD-COPY-1.0"
 __archive__ = "RE-EXPAND-1.0"
 __reheal__ = "REHEAL-1.0"
 __survival__ = "CROSS-NETWORK-SURVIVAL-1.0"
+__nolie__ = "NO-LIE-1.0"
+__norewrite__ = "NO-REWRITE-1.0"
 __pair_bind__ = "AIH-WP-1.3"
 __hub_law__ = "AIH-WP-1.1"
 
@@ -48,6 +54,7 @@ __all__ = [
     "ColdCopy",
     "GENESIS_EMPTY",
     "HOP_MAX_DEFAULT",
+    "NoLie",
     "Node",
     "QNMRefuse",
     "STATES",
