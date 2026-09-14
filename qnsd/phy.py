@@ -351,9 +351,12 @@ def _parse_tpv(text: str) -> dict[str, Any] | None:
 
 
 def _gpsd_watch(timeout: float = 1.5) -> str:
+    """Talk to a local gpsd only when the socket file already exists."""
+    if not Path("/var/run/gpsd.sock").exists() and not Path("/run/gpsd.sock").exists():
+        return ""
     try:
         sock = socket.create_connection(("127.0.0.1", 2947), timeout=timeout)
-    except OSError:
+    except Exception:
         return ""
     try:
         sock.sendall(b'?WATCH={"enable":true,"json":true}\n')
@@ -383,21 +386,16 @@ def probe_gnss(runner: Runner | None = None) -> dict[str, Any]:
     fix = _parse_tpv(text) if text else None
     if fix is None and not pipe.get("missing"):
         fix = _parse_tpv(text)
-    if fix is None and runner is None:
-        fix = _parse_tpv(_gpsd_watch())
     sock_path = Path("/var/run/gpsd.sock")
-    if fix is None and (pipe.get("missing") and not sock_path.exists()) and runner is not None:
+    run_path = Path("/run/gpsd.sock")
+    gpsd_seated = sock_path.exists() or run_path.exists()
+    if fix is None and runner is None and gpsd_seated:
+        fix = _parse_tpv(_gpsd_watch())
+    if fix is None and pipe.get("missing") and not gpsd_seated:
         return _card(
             "gps",
             LABEL_ABSENT,
-            tool="gpspipe",
-            detail="gpsd/NMEA receiver not present",
-        )
-    if fix is None and pipe.get("missing") and not sock_path.exists() and runner is None:
-        return _card(
-            "gps",
-            LABEL_ABSENT,
-            tool="gpsd",
+            tool="gpspipe" if runner is not None else "gpsd",
             detail="gpsd/NMEA receiver not present",
         )
     if fix is None:
@@ -428,7 +426,12 @@ def probe_nfc(runner: Runner | None = None) -> dict[str, Any]:
     listed = run_cmd(["nfc-list"], runner=runner)
     text = str(listed.get("stdout") or "") + str(listed.get("stderr") or "")
     if not listed.get("missing"):
-        if "NFC device" in text and "No NFC device found" not in text:
+        lowered = text.lower()
+        found_reader = (
+            ("nfc device" in lowered or "pn532" in lowered or "acr122" in lowered)
+            and "no nfc device found" not in lowered
+        )
+        if found_reader:
             reader = ""
             for line in text.splitlines():
                 stripped = line.strip()

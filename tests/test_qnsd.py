@@ -206,11 +206,12 @@ def test_11_plc_without_domain_absent(tmp_path: Path) -> None:
     assert node.stack.adapters["plc"].presence(node.ctx()) == "PRESENT"
 
 
-def test_12_rf_without_profile_absent(tmp_path: Path) -> None:
+def test_12_rf_without_modem_absent(tmp_path: Path) -> None:
     node = _boot(tmp_path)
     assert node.stack.adapters["rf"].presence(node.ctx()) == ABSENT
     node.declare("rf", {"profile": "ism-868"})
-    assert node.stack.adapters["rf"].presence(node.ctx()) == "PRESENT"
+    # A declared profile is not an OS modem. Do not invent PRESENT.
+    assert node.stack.adapters["rf"].presence(node.ctx()) == ABSENT
 
 
 def test_13_camera_deny_perm_walk_next(tmp_path: Path) -> None:

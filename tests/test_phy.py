@@ -26,7 +26,7 @@ LIVE_SCRIPT = {
     ("gpspipe", "-w", "-n", "4"): (
         '{"class":"TPV","mode":3,"lat":51.5074,"lon":-0.1278,"time":"2026-09-14T00:00:00.000Z"}\n'
     ),
-    ("nfc-list"): "NFC device: pn532_uart:/dev/ttyUSB0 opened\n",
+    ("nfc-list",): "NFC device: pn532_uart:/dev/ttyUSB0 opened\n",
 }
 
 

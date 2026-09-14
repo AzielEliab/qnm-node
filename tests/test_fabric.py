@@ -191,7 +191,9 @@ def test_walker_translate_declare_required_and_mocks(tmp_path: Path) -> None:
     from qnsd.vias.base import DECLARE_REQUIRED as BASE_DECLARE
 
     assert DECLARE_REQUIRED == BASE_DECLARE
-    assert "wifi" in DECLARE_REQUIRED
+    assert "plc" in DECLARE_REQUIRED
+    assert "light" in DECLARE_REQUIRED
+    assert "wifi" not in DECLARE_REQUIRED
     assert qnsd.stack.adapters["rf"].presence(qnsd.ctx()) == ABSENT
     assert qnsd.stack.adapters["plc"].presence(qnsd.ctx()) == ABSENT
     assert qnsd.stack.adapters["light"].presence(qnsd.ctx()) == ABSENT
