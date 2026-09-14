@@ -1,23 +1,24 @@
-"""Bluetooth via — software MOCK. Protocol-complete; no OS radio.
+"""Bluetooth via — BlueZ (`bluetoothctl`) / sysfs.
 
-Channels-ON allows the software path. Emit without a fielded PHY is
-HOOK-PENDING refuse. Do not claim a live BT packet flew.
+LIVE when an adapter is present. No invented pairing.
 """
 
 from __future__ import annotations
 
-from qnsd.vias.base import MOCK, PRESENT, BaseAdapter, ViaContext
+from qnsd.vias.base import ABSENT, PRESENT, BaseAdapter, ViaContext, os_phy_emit
 
 
 class BtAdapter(BaseAdapter):
     name = "bt"
-    mock = True
-    device_hook = MOCK
+    mock = False
+    device_hook = "os"
     protocol = "ViaAdapter"
 
     def presence(self, ctx: ViaContext) -> str:
-        _ = ctx
-        return PRESENT
+        return PRESENT if ctx.phy("bt").get("live") else ABSENT
+
+    def emit(self, photon, ctx: ViaContext):
+        return os_phy_emit(self.name, photon, ctx)
 
 
 ADAPTER = BtAdapter()

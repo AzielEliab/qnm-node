@@ -46,11 +46,23 @@ def _live(node: Node) -> Node:
     return node
 
 
-def test_01_all_nine_vias_import_protocol() -> None:
-    from qnsd.vias import bt, lan, light, local, operator, plc, qns, rf, wifi
+def test_01_all_vias_import_protocol() -> None:
+    from qnsd.vias import bt, gps, lan, light, local, nfc, operator, plc, qns, rf, wifi
 
-    mods = (lan, wifi, plc, bt, rf, light, qns, operator, local)
-    assert VIA_ORDER == ("lan", "wifi", "plc", "bt", "rf", "light", "qns", "operator", "local")
+    mods = (lan, wifi, plc, bt, rf, gps, nfc, light, qns, operator, local)
+    assert VIA_ORDER == (
+        "lan",
+        "wifi",
+        "plc",
+        "bt",
+        "rf",
+        "gps",
+        "nfc",
+        "light",
+        "qns",
+        "operator",
+        "local",
+    )
     for name, mod in zip(VIA_ORDER, mods, strict=True):
         adapter = mod.ADAPTER
         assert adapter.name == name
@@ -58,9 +70,12 @@ def test_01_all_nine_vias_import_protocol() -> None:
         assert callable(adapter.presence)
         assert callable(adapter.admit)
         assert callable(adapter.emit)
-        if name in ("bt", "rf", "wifi", "light"):
-            assert adapter.mock is True
-            assert adapter.device_hook == "MOCK"
+        if name in ("bt", "rf", "wifi", "gps", "nfc"):
+            assert adapter.mock is False
+            assert adapter.device_hook == "os"
+        elif name == "light":
+            assert adapter.mock is False
+            assert adapter.device_hook == "HOOK-PENDING"
         else:
             assert adapter.mock is False
 
@@ -191,11 +206,12 @@ def test_11_plc_without_domain_absent(tmp_path: Path) -> None:
     assert node.stack.adapters["plc"].presence(node.ctx()) == "PRESENT"
 
 
-def test_12_rf_without_profile_absent(tmp_path: Path) -> None:
+def test_12_rf_without_modem_absent(tmp_path: Path) -> None:
     node = _boot(tmp_path)
     assert node.stack.adapters["rf"].presence(node.ctx()) == ABSENT
     node.declare("rf", {"profile": "ism-868"})
-    assert node.stack.adapters["rf"].presence(node.ctx()) == "PRESENT"
+    # A declared profile is not an OS modem. Do not invent PRESENT.
+    assert node.stack.adapters["rf"].presence(node.ctx()) == ABSENT
 
 
 def test_13_camera_deny_perm_walk_next(tmp_path: Path) -> None:

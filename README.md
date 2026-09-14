@@ -7,13 +7,13 @@ with **[AIH-WP-1.3](docs/AIH-WP-1.3.md)** Spiderweb Pair-Bind
 remains **AIH-WP-1.1**.
 
 **Author:** Aziel Eliab only
-**Date:** September 2026 · v1.3.0
+**Date:** September 2026 · v1.5.0
 **License:** [Apache-2.0](LICENSE)
 **Spec:** QNM-BUILD-1.0 · AIH-WP-1.3 · QNS-CD-1.0 · FABRIC-MESH-PIPELINE-1.0
 
-> Fabric enable is Channels-ON: the software path allows RF / BT /
-> Wi-Fi / photon. That is not fielded radios. Soft PHY stays **MOCK**
-> — never invented live-link success. Receipts to disk. Poison
+> Fabric enable is Channels-ON: the software path is allowed.
+> Cellular / Wi-Fi / BT / GNSS / NFC stamp **LIVE | ABSENT | REFUSED**
+> from real OS probes — never mock chatter. Receipts to disk. Poison
 > refused, not interpreted. Pair-id outlives the path. Waiting is
 > not death. GET /v1/mesh never enables.
 
@@ -27,8 +27,8 @@ Local **qnsd owns vias**. Suite Workers **cite / proxy only**.
 ## Honest scope
 
 **THIS IS:** a 127.0.0.1 process with APG on every ingress, unarmed
-bearers until fabric enable (then RF / BT / Wi-Fi / photon **software
-paths ON**, still **MOCK** until fielded PHY), a visible outbox, declared tethers, PHOENIX-LOCK (local wait /
+bearers until fabric enable (then software paths ON; OS radios
+**LIVE | ABSENT | REFUSED**), a visible outbox, declared tethers, PHOENIX-LOCK (local wait /
 re-seal after poison or isolation; not public hostname restore),
 QNM-S (score never reads views), medium-independent pair-ids that
 forward only along existing spiderweb edges, a sibling `qnsd`
@@ -44,27 +44,27 @@ outbox → cold-copy / phoenix / reheal / re-expand).
 Bell-pair physics, a qubit machine, a public `qnsd` proxy, a Node Gate,
 or a call into AZ Generator.
 
-### REAL vs MOCK vs LAW
+### REAL vs LIVE / ABSENT / REFUSED vs LAW
 
 | Kind | What |
 |------|------|
-| **REAL** | Local 127.0.0.1 process. APG refuse-first. Split-wires tip + dwell clocks. Photon (`QNS1` 1.3) codec + walker + translate. Outbox / receipts / chain on disk. Cold copies, multi-device persist/transfer, archive re-expand, own-tip reheal, phoenix-WAIT. Loopback bind. Remote bearer stays off. |
-| **MOCK** | Bluetooth, RF, Wi-Fi, photon-flash, camera/emitter, and bitmesh **channels**. Protocol-complete (`ViaAdapter`). Not fielded hardware. Invented live PHY is forbidden. Channels-ON allows the software path only; emit without a fielded PHY is `QNS-HOOK-PENDING`, not a live packet. PLC is software-declared (no invented PHY). |
-| **LAW** | CROSS-NETWORK-SURVIVAL / REHEAL / SPLIT-WIRES / COLD-COPY / NO-LIE / NO-REWRITE / NO-FAN / QNS-CD / FABRIC-MESH-PIPELINE ALL-CHANNELS-ON. Internal bitmesh geo only — public receipts stay no user/geo. Unkillability **architecture ≠ fielded**; hubs must not publish 100. Plane B DOI is SLOT/null until seated; Plane C USB airgap requires **operator offline-verify/attest before LIVE**. `GET /v1/mesh` never enables. No Softwares-tab product. AZ Generator is not called from qnm. Identity Aziel Eliab only. |
+| **REAL** | Local 127.0.0.1 process. APG refuse-first. Split-wires tip + dwell clocks. Photon (`QNS1` 1.3) codec + walker + translate. Outbox / receipts / chain on disk. Cold copies, named-host persist/transfer, archive re-expand, own-tip reheal, phoenix-WAIT. Loopback bind. Remote bearer stays off. |
+| **LIVE / ABSENT / REFUSED** | Cellular (ModemManager/`mmcli`), Wi-Fi (NetworkManager/`iw`), Bluetooth (BlueZ), GNSS (gpsd/NMEA receive-only), NFC (libnfc/PCSC). LIVE only when the OS adapter is present. Missing hardware is ABSENT; emit is REFUSED (`RADIO-NO-*`). No mock chatter. Camera/emitter stays HOOK-PENDING. |
+| **LAW** | CROSS-NETWORK-SURVIVAL / REHEAL / SPLIT-WIRES / COLD-COPY / NO-LIE / NO-REWRITE / NO-FAN / QNS-CD / FABRIC-MESH-PIPELINE ALL-CHANNELS-ON. Internal bitmesh geo needs LIVE GNSS (`RADIO-NO-GNSS` without a receiver). Public receipts stay no user/geo. Unkillability **architecture ≠ fielded**; hubs must not publish 100. Plane B is hash-verified Codeberg/archive/GitFlic (Zenodo not required); Plane C attest-before-LIVE. `GET /v1/mesh` never enables radios. No Softwares-tab product. AZ Generator is not called from qnm. Identity Aziel Eliab only. |
 
 MirageGrid **Node Gate** is an **outward claim surface** fed by a
 deep-node AZ Generator. That generator is **not called** from qnm.
 Node Gate is a MirageGrid subsystem only. Its claim clock is an
 **external stranger** to qnm tip and dwell clocks. qnm stays local
 fabric. Channels-ON when fabric-enabled means the software path is
-allowed; RF / BT / Wi-Fi / photon / bitmesh stay **MOCK** until a
-real PHY is fielded. Phoenix does not restore a public hostname.
+allowed; OS radios are LIVE only when adapters are present.
+Phoenix does not restore a public hostname.
 
 ## Bulletproof law (QNM-BUILD-1.0)
 
 - Local modules run **radios off** until fabric enable; then the
-  software path is ON and soft radios stay **MOCK** (not fielded PHY,
-  not a live RF mesh claim)
+  software path is ON and OS PHYs stamp LIVE | ABSENT | REFUSED
+  (not invented live RF mesh)
 - Receipts to **disk** (`data/receipts/`, `data/chain/`)
 - Poison **refused, not interpreted**
 - Tamper **isolates**
@@ -165,11 +165,13 @@ Local API binds **127.0.0.1:8891** only:
 | `POST /local/survive` | Public network dead; local verify / append / archive |
 | `GET/POST /local/nolie` | No-lie / no-rewrite status; receipts still hash |
 | `POST /local/rewrite` | Always refused (`QNM-NO-REWRITE`) |
-| `GET/POST /local/fabric` | Pipeline status / enable (software Channels-ON; soft radios MOCK) / one local pass (never calls AZ Generator) |
-| `POST /local/persist` | Multi-device vault-on-transfer (laptop / phone / watch / radio / bluetooth) |
-| `GET/POST /local/bitmesh` | Internal geohash bind (not public ACT-RECEIPT geo) |
-| `GET /local/unkillability` | Architecture vs fielded erasure cost. `score` = fielded (68–70 until Plane B DOI + Plane C operator attest). Hubs must not publish architecture 100. |
-| `GET/POST /local/planes` | Plane A/B/C facts. Plane C USB airgap needs operator offline-verify/attest before LIVE. No FAN. |
+| `GET/POST /local/fabric` | Pipeline status / enable (software Channels-ON; OS PHYs LIVE\|ABSENT) / one local pass (never calls AZ Generator) |
+| `GET /local/channels` | ALL-CHANNELS audit: software `REAL`; OS radios `LIVE` / `ABSENT` |
+| `GET /local/phy` | Cellular / Wi-Fi / BT / GNSS / NFC OS probe cards |
+| `POST /local/persist` | Named-host vault-on-transfer. Radio/BT PHY path is LIVE or ABSENT |
+| `GET/POST /local/bitmesh` | Internal geohash bind (LIVE GNSS or `RADIO-NO-GNSS`; not public ACT-RECEIPT geo) |
+| `GET /local/unkillability` | Architecture vs fielded erasure cost. `score` = fielded (68–70 until hash-verified Plane B shelf + Plane C attest). Zenodo is not required. Hubs must not publish architecture 100. |
+| `GET/POST /local/planes` | Plane A/B/C facts. Hash-verified Codeberg/archive/GitFlic shelves count. Plane C attest-before-LIVE. Refuse invented DOI or airgap success. |
 
 `qnsd` adds `POST /local/policy` and `POST /local/declare` on the same
 loopback bind (port from `cfg/node.json`, default 8891).
@@ -177,17 +179,17 @@ loopback bind (port from `cfg/node.json`, default 8891).
 ## QNS-CD-1.0 (local qnsd)
 
 Photon is the packet (`QNS1` ver 1.3). QNS is the native medium. Light
-is camera-flash OCC. `VIA_ORDER` = lan, wifi, plc, bt, rf, light, qns,
-operator, local. `local` + `qns` + `operator` are always PRESENT
-(software). rf / plc / light / wifi need declare unless fabric-armed.
-Restriction walks the next class automatically. `force_via` waits —
-no silent remap. Packet id does not change across hops. Sticky-via is
-banned. SEAL does not require OS BT / Wi-Fi.
+is camera-flash OCC. `VIA_ORDER` = lan, wifi, plc, bt, rf, gps, nfc,
+light, qns, operator, local. `local` + `qns` + `operator` are always
+PRESENT (software). Cellular / Wi-Fi / BT / GNSS / NFC are LIVE OS
+bindings or ABSENT. Restriction walks the next class automatically.
+`force_via` waits — no silent remap. Packet id does not change across
+hops. Sticky-via is banned. SEAL does not require OS BT / Wi-Fi.
 
-Device hooks for Bluetooth, RF, Wi-Fi, photon-flash, and camera are
-**MOCK** and still implement `ViaAdapter`. Photon **codec** is REAL;
-the photon **channel** is MOCK until fielded PHY. See
-[docs/QNS-CD-1.0.md](docs/QNS-CD-1.0.md)
+OS radios implement `ViaAdapter` against real host tools. Photon
+**codec** is REAL; the camera/emitter hook stays HOOK-PENDING. See
+[docs/QNS-CD-1.0.md](docs/QNS-CD-1.0.md) and
+[docs/RADIO-PHY-1.0.md](docs/RADIO-PHY-1.0.md)
 (PDF companion noted there; Worker does not serve it).
 
 ## Layout

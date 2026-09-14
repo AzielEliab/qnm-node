@@ -39,6 +39,19 @@ DEVICE_CLASSES = (
     "radio",
     "bluetooth",
 )
+PHY_DEVICE_CLASSES = frozenset({"radio", "bluetooth"})
+
+
+def device_fielding(host: str, *, phy: dict[str, Any] | None = None) -> str:
+    """Named vault replica is REAL. Radio/BT PHY path is LIVE or ABSENT."""
+    cards = phy or {}
+    if host == "radio":
+        card = cards.get("cellular") or cards.get("rf") or {}
+        return "LIVE" if card.get("live") else "ABSENT"
+    if host == "bluetooth":
+        card = cards.get("bt") or {}
+        return "LIVE" if card.get("live") else "ABSENT"
+    return "REAL"
 FORBIDDEN_HOSTS = frozenset(
     {
         "*",
@@ -194,6 +207,10 @@ class ColdCopy:
             placed.append(self.transfer(tip, host=host))
         vault = self.transfer(tip, host="mesh-vault")
         reader = self.transfer(tip, host="reader")
+        from qnsd.phy import probe_all
+
+        radios = probe_all().get("radios") or {}
+        fielding = {row["host"]: device_fielding(row["host"], phy=radios) for row in placed}
         return {
             "ok": True,
             "tip": tip,
@@ -203,6 +220,8 @@ class ColdCopy:
             "reader": reader,
             "erased": False,
             "live_sync": False,
+            "phy_push": False,
+            "fielding": fielding,
             "pull_erases_tip": False,
             "offline_hop_erases_tip": False,
             "spec": COLD_SPEC,

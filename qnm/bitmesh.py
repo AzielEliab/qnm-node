@@ -2,8 +2,8 @@
 
 Geohash (or equivalent) binds to a tip for **internal bitmesh routing
 only**. This is not public ACT-RECEIPT geo and not a fielded radio.
-The bitmesh channel is **MOCK** until real PHY exists. Public receipts
-stay no user / no geo / no IP.
+Bitmesh geo binds only from a LIVE GNSS fix (`RADIO-NO-GNSS`
+without a receiver). Public receipts stay no user / no geo / no IP.
 
 Author: Aziel Eliab only.
 """
@@ -115,18 +115,33 @@ class Bitmesh:
         if not self.path.is_file():
             self.path.write_text("", encoding="utf-8")
 
-    def status(self) -> dict[str, Any]:
+    def status(self, *, phy_runner: Any = None) -> dict[str, Any]:
+        from qnsd.phy import probe
+
+        card = probe("gps", runner=phy_runner)
+        live = bool(card.get("live"))
+        binds = len(self.list())
+        if live:
+            fielding = "LIVE"
+        elif binds:
+            fielding = "ABSENT"
+        else:
+            fielding = "ABSENT"
         return {
             "ok": True,
             "spec": BITMESH_SPEC,
             "build": SPEC,
             "author": AUTHOR,
             "plane": BITMESH_PLANE,
-            "channel": "MOCK",
+            "channel": fielding,
             "fielded": False,
             "public": False,
             "public_receipt_geo": False,
-            "binds": len(self.list()),
+            "binds": binds,
+            "gps_driver": live,
+            "default_off": not live,
+            "fielding": fielding,
+            "live_fix": live,
         }
 
     def list(self) -> list[dict[str, Any]]:
@@ -140,21 +155,38 @@ class Bitmesh:
         self,
         tip: str,
         *,
-        lat: float,
-        lon: float,
+        lat: float | None = None,
+        lon: float | None = None,
         precision: int = 8,
         public: bool = False,
+        phy_runner: Any = None,
     ) -> dict[str, Any]:
-        """Bind a geohash to a tip on the internal bitmesh plane."""
+        """Bind a geohash from a LIVE GNSS fix. Never invent a position."""
         if public:
             raise QNMRefuse(
                 "QNM-NO-PUBLIC-GEO",
                 "bitmesh geo is not a public ACT-RECEIPT field",
             )
+        from qnsd.phy import probe
+
+        card = probe("gps", runner=phy_runner)
+        if not card.get("live"):
+            raise QNMRefuse(
+                "RADIO-NO-GNSS",
+                "bitmesh geo needs a LIVE GNSS receiver; no invented fix",
+            )
+        fix = dict(card.get("fix") or {})
+        use_lat = fix.get("lat") if fix.get("lat") is not None else lat
+        use_lon = fix.get("lon") if fix.get("lon") is not None else lon
+        if use_lat is None or use_lon is None:
+            raise QNMRefuse(
+                "RADIO-NO-GNSS",
+                "GNSS LIVE but no 2D/3D fix; refuse invented coordinates",
+            )
         digest = str(tip or "").strip().lower()
         if len(digest) != 64:
             raise QNMRefuse("QNM-WIRES-FAIL-CLOSED", "bitmesh bind needs a tip hash")
-        token = geohash(float(lat), float(lon), precision=precision)
+        token = geohash(float(use_lat), float(use_lon), precision=precision)
         rec = {
             "tip": digest,
             "geohash": token,
@@ -163,6 +195,9 @@ class Bitmesh:
             "public": False,
             "public_receipt": False,
             "act_receipt_geo": False,
+            "gps_driver": True,
+            "fielding": "LIVE",
+            "default_off": False,
             "utc": _utc_now(),
             "spec": BITMESH_SPEC,
             "author": AUTHOR,

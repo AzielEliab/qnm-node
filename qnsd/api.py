@@ -14,18 +14,11 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
+from qnm.fabric import mesh_never_enables
 from qnsd.boot import AUTHOR, SPEC, QNSRefuse, load_lock
 from qnsd.node import DEFAULT_BIND, DEFAULT_PORT, Node
 from qnsd.photon import HOP_MAX_DEFAULT
-
-MESH_NEVER_ENABLE = frozenset(
-    {
-        "/v1/mesh",
-        "/mesh",
-        "/v1/mesh/enable",
-        "/mesh/enable",
-    }
-)
+from qnsd.vias.base import audit_channels
 
 LOCAL_PATHS = {
     "/local/boot",
@@ -40,6 +33,8 @@ LOCAL_PATHS = {
     "/local/receipts",
     "/local/phoenix/arm",
     "/local/fabric",
+    "/local/channels",
+    "/local/phy",
 }
 
 
@@ -89,10 +84,10 @@ def handle_node(node: Node, method: str, path: str, body: bytes = b"") -> tuple[
     """HTTP dispatch used by Node.handle and the loopback server."""
     parsed = urlparse(path)
     route = parsed.path.rstrip("/") or "/"
-    if route in MESH_NEVER_ENABLE:
+    if mesh_never_enables(path):
         return 403, QNSRefuse(
             "QNM-MESH-NEVER-ENABLES",
-            "GET /v1/mesh never enables",
+            "GET /v1/mesh never enables radios",
         ).as_dict()
     if route not in LOCAL_PATHS:
         return 404, QNSRefuse("QNM-LOOPBACK-ONLY", "unknown local path").as_dict()
@@ -179,18 +174,27 @@ def _dispatch(node: Node, method: str, route: str, body: bytes) -> dict[str, Any
         return node.cut_outbox(str(payload.get("id") or ""))
     if route == "/local/phoenix/arm" and method == "POST":
         return node.arm_phoenix()
+    if route == "/local/channels" and method == "GET":
+        return audit_channels(node.ctx())
+    if route == "/local/phy" and method == "GET":
+        from qnsd.phy import probe_all
+
+        return probe_all(runner=node.ctx().phy_runner)
     if route == "/local/fabric" and method == "GET":
+        snap = node.snapshot()
         return {
             "ok": True,
             "armed": node.fabric_armed,
             "radios": "software-on" if node.fabric_armed else "off",
             "radios_fielded": False,
-            "radios_status": "MOCK",
-            "channels_on_means": "software path allowed; not fielded PHY",
+            "radios_status": "ABSENT",
+            "channels_on_means": "software path allowed; OS PHYs LIVE|ABSENT|REFUSED",
             "live_rf_mesh": False,
-            "via_order": list(node.snapshot()["via_order"]),
-            "presence": node.snapshot()["presence"],
+            "via_order": list(snap["via_order"]),
+            "presence": snap["presence"],
+            "channels": snap["channels"],
             "az_generator": False,
+            "mesh_enable": False,
             "spec": SPEC,
             "author": AUTHOR,
         }
@@ -236,8 +240,8 @@ def main(argv: list[str] | None = None) -> int:
                 "bind": DEFAULT_BIND,
                 "radios": "software-on" if node.fabric_armed else "off",
             "radios_fielded": False,
-            "radios_status": "MOCK",
-            "channels_on_means": "software path allowed; not fielded PHY",
+            "radios_status": "ABSENT",
+            "channels_on_means": "software path allowed; OS PHYs LIVE|ABSENT|REFUSED",
                 "sticky_via": False,
                 "softwares_tab": False,
                 "node_gate": False,

@@ -46,7 +46,7 @@ from qnm.archive import ChainArchive
 from qnm.chain import Chain
 from qnm.bitmesh import Bitmesh, refuse_public_geo
 from qnm.coldcopy import DEVICE_CLASSES, ColdCopy
-from qnm.fabric import CLAIM_CLOCK, FABRIC_SPEC, Fabric
+from qnm.fabric import CLAIM_CLOCK, FABRIC_SPEC, Fabric, mesh_never_enables
 from qnm.planes import Planes
 from qnsd.vias import radios_stamp
 from qnm.unkillability import compute_unkillability
@@ -113,16 +113,9 @@ LOCAL_PATHS = {
     "/local/bitmesh",
     "/local/unkillability",
     "/local/planes",
+    "/local/channels",
+    "/local/phy",
 }
-
-MESH_NEVER_ENABLE = frozenset(
-    {
-        "/v1/mesh",
-        "/mesh",
-        "/v1/mesh/enable",
-        "/mesh/enable",
-    }
-)
 
 
 def ensure_data_dirs(root: Path) -> None:
@@ -281,8 +274,8 @@ class Node:
             "bearers": self.bearers.snapshot(),
             "radios": radios_stamp(self.fabric.enabled),
             "radios_fielded": False,
-            "radios_status": "MOCK",
-            "channels_on_means": "software path allowed; not fielded PHY",
+            "radios_status": self.fabric.status().get("radios_status") or "ABSENT",
+            "channels_on_means": "software path allowed; OS PHYs LIVE|ABSENT|REFUSED",
             "auto_heal": False,
             "live_from_site_ping": False,
             "phoenix": self.phoenix.status(),
@@ -301,6 +294,7 @@ class Node:
             "verify_without_voice": True,
             "copies_one_tunnel": False,
             "fabric": self.fabric.status(),
+            "channels": self.fabric.channel_audit(),
             "bitmesh": self.bitmesh.status(),
             "unkillability": self.unkillability(),
             "planes": self.planes.snapshot(),
@@ -929,10 +923,12 @@ class Node:
                 "bitmesh geo is not a public ACT-RECEIPT field",
             )
         tip = str(payload.get("tip") or self.chain.tip or "")
+        lat = payload.get("lat", payload.get("latitude"))
+        lon = payload.get("lon", payload.get("longitude"))
         rec = self.bitmesh.bind(
             tip,
-            lat=float(payload.get("lat") or payload.get("latitude") or 0.0),
-            lon=float(payload.get("lon") or payload.get("longitude") or 0.0),
+            lat=None if lat is None else float(lat),
+            lon=None if lon is None else float(lon),
             precision=int(payload.get("precision") or 8),
             public=bool(payload.get("public")),
         )
@@ -971,6 +967,7 @@ class Node:
         if self.chain.tip:
             replica_n = max(replica_n, self.vault.replica_count(self.chain.tip))
         planes = self.planes.snapshot()
+        audit = self.fabric.channel_audit()
         return compute_unkillability(
             fabric_enabled=self.fabric.enabled,
             persist_devices=persist,
@@ -978,8 +975,12 @@ class Node:
             bitmesh_binds=len(self.bitmesh.list()),
             views=extra.get("views") if extra else None,
             plane_b_doi=planes["plane_b"].get("doi"),
+            plane_b_verified=bool(planes["gates"].get("plane_b_verified")),
             plane_c_offline_verify=bool(planes["plane_c"].get("offline_verify")),
             planes=planes,
+            gps_driver=bool(audit.get("live_gnss")),
+            physical_vias=dict(audit.get("physical_vias") or {}),
+            os_phy=dict(audit.get("os_phy") or {}),
         )
 
     def planes_act(self, payload: dict[str, Any] | None = None) -> dict[str, Any]:
@@ -994,8 +995,35 @@ class Node:
         if op in ("plane_c_live", "live_c", "fan"):
             self.planes.refuse_plane_c_live()
         if op in ("seat_b", "zenodo", "doi"):
-            rec = self.planes.seat_zenodo_doi(body.get("doi"))
-            self._write_receipt("plane_b_doi", {"doi": rec.get("doi"), "status": rec.get("status")})
+            rec = self.planes.seat_zenodo_doi(
+                body.get("doi"),
+                body=body.get("body") or body.get("pack"),
+                digest=body.get("digest") or body.get("pack_digest"),
+            )
+            self._write_receipt(
+                "plane_b_doi",
+                {
+                    "doi": rec.get("doi"),
+                    "status": rec.get("status"),
+                    "hash_verified": bool(rec.get("hash_verified")),
+                    "zenodo_required": False,
+                },
+            )
+            return rec
+        if op in ("shelf", "seat_shelf"):
+            rec = self.planes.seat_shelf(
+                str(body.get("url") or body.get("shelf") or ""),
+                str(body.get("digest") or body.get("pack_digest") or ""),
+                body.get("body") or body.get("pack") or b"",
+            )
+            self._write_receipt(
+                "plane_b_shelf",
+                {
+                    "shelf_host": rec.get("shelf_host"),
+                    "hash_verified": True,
+                    "zenodo_required": False,
+                },
+            )
             return rec
         if op in ("clear_b", "clear_doi"):
             return self.planes.clear_zenodo_doi()
@@ -1183,10 +1211,10 @@ class Node:
     def handle(self, method: str, path: str, body: bytes = b"") -> tuple[int, dict[str, Any]]:
         parsed = urlparse(path)
         route = parsed.path.rstrip("/") or "/"
-        if route in MESH_NEVER_ENABLE:
+        if mesh_never_enables(path):
             return 403, QNMRefuse(
                 "QNM-MESH-NEVER-ENABLES",
-                "GET /v1/mesh never enables",
+                "GET /v1/mesh never enables radios",
             ).as_dict()
         if route == "/local/outbox/cut":
             route = "/local/outbox/cut"
@@ -1334,6 +1362,12 @@ class Node:
             return self.bind_bitmesh(payload)
         if route == "/local/unkillability" and method == "GET":
             return self.unkillability()
+        if route == "/local/channels" and method == "GET":
+            return self.fabric.channel_audit()
+        if route == "/local/phy" and method == "GET":
+            from qnsd.phy import probe_all
+
+            return probe_all()
         if route == "/local/planes" and method == "GET":
             return self.planes.snapshot()
         if route == "/local/planes" and method == "POST":
@@ -1422,16 +1456,18 @@ def main(argv: list[str] | None = None) -> int:
                 "pair_bind": PAIR_SPEC,
                 "radios": radios_stamp(node.fabric.enabled),
                 "radios_fielded": False,
-                "radios_status": "MOCK",
+                "radios_status": node.fabric.status().get("radios_status") or "ABSENT",
                 "bind": DEFAULT_BIND,
                 "hop_max": HOP_MAX_DEFAULT,
                 "bell_pair": False,
                 "qubit": False,
                 "forbidden_live_symbols": ["Lumen", "Mandible", "lattice_online", "mesh_complete"],
                 "fabric": FABRIC_SPEC,
+                "channels": node.fabric.channel_audit(),
                 "node_gate": False,
                 "az_generator": False,
                 "mesh_enable": False,
+                "zenodo_required": False,
             }
             print(json.dumps(report, indent=2, sort_keys=True))
             return 0

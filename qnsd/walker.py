@@ -21,6 +21,7 @@ from qnsd.vias.base import (
     HOOK_PENDING,
     PERM,
     PROBE,
+    REFUSED,
     ViaAdapter,
     ViaContext,
     ViaResult,
@@ -153,7 +154,7 @@ class ViaStack:
                 if restricted:
                     return self._wait(body, name, "force_via restricted; perm")
                 continue
-            if emitted.kind in (FAIL, ABSENT, HOOK_PENDING):
+            if emitted.kind in (FAIL, ABSENT, HOOK_PENDING, REFUSED):
                 if restricted:
                     return self._wait(body, name, "force_via restricted; no silent remap")
                 continue

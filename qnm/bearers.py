@@ -5,7 +5,7 @@ Site ping is not a bearer.
 
 When fabric is enabled, RF / BT / Wi-Fi / lan software paths are
 allowed (Channels-ON). That is not fielded radios and not a live-packet
-claim. Soft radio bearers stay MOCK. Radio enable without fabric still
+claim. OS radio bearers are LIVE or ABSENT. Radio enable without fabric still
 refuses (`QNM-RADIO-OFF`). GET /v1/mesh never enables these bearers.
 """
 
@@ -19,6 +19,14 @@ LOCAL_ON = "local"
 OPERATOR = "operator"
 DEFAULT_OFF = ("operator", "lan", "radio", "remote", "wifi", "bt")
 FABRIC_ARM = ("lan", "radio", "wifi", "bt")
+
+
+def _radios_status() -> str:
+    """LIVE if any OS radio adapter is present; else ABSENT. Never MOCK."""
+    from qnsd.phy import probe_all
+
+    cards = probe_all()
+    return "LIVE" if cards.get("live") else "ABSENT"
 
 
 class Bearers:
@@ -42,8 +50,8 @@ class Bearers:
         return {
             "ok": True,
             "armed": True,
-            "channels_on_means": "software path allowed; not fielded PHY",
-            "radios_status": "MOCK",
+            "channels_on_means": "software path allowed; OS PHYs LIVE|ABSENT|REFUSED",
+            "radios_status": _radios_status(),
             "radios_fielded": False,
             "bearers": self.snapshot(),
             "live_rf_mesh": False,
@@ -72,7 +80,7 @@ class Bearers:
             "armed": self.fabric_armed and name in FABRIC_ARM and on,
             "live_link": False,
             "radios_fielded": False,
-            "radios_status": "MOCK",
+            "radios_status": _radios_status(),
             "bearers": self.snapshot(),
             "spec": SPEC,
             "author": AUTHOR,

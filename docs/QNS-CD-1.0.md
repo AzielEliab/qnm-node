@@ -40,16 +40,18 @@ Anon-broadcast stays a loopback sibling — never a publish path.
 - Not enabled by `GET /v1/mesh`. Not a Node Gate / IP panel.
 - Not a VPN, radio mesh claim, qubit machine, or Bell-pair physics.
 - Not Lumen / Mandible / `lattice_online` / `mesh_complete`.
-- Device hooks for Bluetooth, RF, Wi-Fi, photon-flash, and camera are
-  **MOCK** and still implement the Protocol. Mock is honest. Invented
-  hardware is not. Channels-ON is a software path, not fielded radios.
+- Cellular / Wi-Fi / BT / GNSS / NFC are LIVE OS bindings or
+  ABSENT / REFUSED. Camera/emitter stay HOOK-PENDING. Invented
+  hardware is forbidden. Channels-ON is a software path, not a
+  fake live mesh.
 
 ## §4 Tree
 
 ```
 qnsd/{boot,node,photon,outbox,walker,translate,apg,azpipe,
       chain,receipts,pairs,memorial,policy,api}.py
-qnsd/vias/{base,lan,wifi,plc,bt,rf,light,qns,operator,local}.py
+qnsd/vias/{base,lan,wifi,plc,bt,rf,gps,nfc,light,qns,operator,local}.py
+qnsd/phy.py              RADIO-PHY-1.0 OS probes
 qnsd/light/{codec,camera,emitter}.py
 qnm/                 QNM-BUILD-1.0 (reused; not replaced)
 modules/anon-broadcast/   loopback sibling — never a publish path
@@ -109,26 +111,27 @@ enter `photon_id`. Admit on one class and emit on another sets
 ## §8 Vias
 
 ```
-VIA_ORDER = lan, wifi, plc, bt, rf, light, qns, operator, local
+VIA_ORDER = lan, wifi, plc, bt, rf, gps, nfc, light, qns, operator, local
 ```
 
 Every module implements `ViaAdapter` (Protocol): `presence`, `admit`,
-`emit`. All nine are importable.
+`emit`. All eleven are importable (`gps` and `nfc` are LIVE OS
+bindings).
 
 | Class | Presence |
 |-------|----------|
 | `local`, `qns`, `operator` | always PRESENT (software) |
-| `lan`, `bt` | PRESENT (software). LAN emit fails without a declared link. |
-| `wifi` | ABSENT without declare unless fabric-armed |
+| `lan` | PRESENT (software). LAN emit fails without a declared link. |
+| `wifi`, `bt`, `rf`, `gps`, `nfc` | PRESENT only when the OS adapter is LIVE |
 | `plc` | ABSENT without declared `domain` unless fabric-armed |
-| `rf` | ABSENT without declared `profile` unless fabric-armed |
 | `light` | ABSENT without declare unless fabric-armed. Camera deny is PERM (walk next). |
 
-Device hooks (`bt`, `rf`, `wifi`, camera, emitter, photon channel)
-are **MOCK**. The Protocol is real. Photon / QNS1 light **codec** is
-**REAL**. Invented live-link success is forbidden. Sticky-via is
-banned — the last success is never the next default. Fabric enable
-allows the RF / BT / Wi-Fi / photon software path (not fielded radios).
+OS radios (`rf`/`cellular`, `wifi`, `bt`, `gps`, `nfc`) are LIVE
+when the host adapter is present, else ABSENT / REFUSED. Camera /
+emitter stay HOOK-PENDING. Photon / QNS1 light **codec** is **REAL**.
+Invented live-link success is forbidden. Sticky-via is banned — the
+last success is never the next default. Fabric enable allows the
+software path; it does not invent PRESENT on OS PHYs.
 
 **Restriction.** COLD → local only. `always_try` walks `VIA_ORDER`; a
 fail / absent / PERM advances to the next class **inside the same
@@ -206,7 +209,7 @@ No `/mesh` enable. No Node Gate. Faces do not proxy this port.
 
 | # | Law |
 |---|-----|
-| 1 | All nine vias import + Protocol |
+| 1 | All vias import + Protocol (including gps / nfc) |
 | 2 | COLD walker only local |
 | 3 | LIVE + always_try walks lan fail → next class without a second API call |
 | 4 | force_via restricted ⇒ wait, no silent remap |

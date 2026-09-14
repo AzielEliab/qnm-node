@@ -5,8 +5,8 @@ translate → outbox → cold-copy / phoenix / reheal / re-expand.
 
 Operator override (ALL-CHANNELS-ON): when fabric is enabled, the
 software path allows RF, Bluetooth, Wi-Fi, and photon/QNS1 light,
-plus lan/plc/operator/local. That is not fielded radios. Soft PHY
-hooks stay **MOCK** — no invented live-link success.
+plus lan/plc/operator/local. OS radios stamp LIVE | ABSENT |
+REFUSED from host probes — no invented live-link success.
 
 qnm-node never calls AZ Generator. Node Gate is a MirageGrid
 subsystem only (outward claim surface). GET /v1/mesh never enables
@@ -20,17 +20,13 @@ from __future__ import annotations
 import json
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 from qnm.bitmesh import refuse_public_geo
 from qnm.boot import AUTHOR, SPEC, QNMRefuse
 from qnm.wires import DWELL_CLOCK, DWELL_SOCKET, TICK_CLOCK, TICK_SOCKET
-from qnsd.vias import (
-    CHANNELS_ON,
-    DECLARE_REQUIRED,
-    VIA_ORDER,
-    channel_honesty,
-    radios_stamp,
-)
+from qnsd.vias import CHANNELS_ON, DECLARE_REQUIRED, VIA_ORDER
+from qnsd.vias.base import audit_channels, channel_honesty, radios_stamp
 
 FABRIC_SPEC = "FABRIC-MESH-PIPELINE-1.0"
 ALWAYS_PRESENT = ("local", "qns", "operator")
@@ -104,6 +100,27 @@ _CLOCKS = {
     CLAIM_CLOCK: CLAIM_SOCKET,
 }
 
+MESH_NEVER_ENABLE = frozenset(
+    {
+        "/v1/mesh",
+        "/mesh",
+        "/v1/mesh/enable",
+        "/mesh/enable",
+        "/v1/mesh/radios",
+        "/mesh/radios",
+        "/v1/mesh/on",
+        "/mesh/on",
+    }
+)
+
+
+def mesh_never_enables(path: str) -> bool:
+    """True for GET/POST mesh routes. Never a radio-enable path."""
+    route = urlparse(str(path or "")).path.rstrip("/") or "/"
+    if route in MESH_NEVER_ENABLE:
+        return True
+    return route.startswith("/v1/mesh") or route == "/mesh" or route.startswith("/mesh/")
+
 
 class Fabric:
     """Local fabric law. Channels-ON is a software path. Does not call MirageGrid."""
@@ -147,8 +164,25 @@ class Fabric:
             encoding="utf-8",
         )
 
+    def _via_ctx(self):
+        from qnsd.vias.base import ViaContext
+
+        return ViaContext(fabric_armed=self.enabled)
+
+    def channel_audit(self) -> dict[str, Any]:
+        """LIVE | ABSENT | REAL for every via. No invented PHY. No MOCK chatter."""
+        audit = audit_channels(self._via_ctx())
+        audit["spec"] = FABRIC_SPEC
+        audit["author"] = AUTHOR
+        audit["enabled"] = self.enabled
+        audit["mesh_enable"] = False
+        audit["az_generator"] = False
+        return audit
+
     def status(self) -> dict[str, Any]:
-        honesty = channel_honesty(enabled=self.enabled)
+        audit = self.channel_audit()
+        honesty = channel_honesty(enabled=self.enabled, ctx=self._via_ctx())
+        phy = dict(audit["physical_vias"])
         return {
             "ok": True,
             "spec": FABRIC_SPEC,
@@ -160,11 +194,18 @@ class Fabric:
             "declare_required": list(DECLARE_REQUIRED),
             "always_present": list(ALWAYS_PRESENT),
             **honesty,
+            "channels": audit["channels"],
+            "channel_labels": audit["labels"],
+            "physical_vias": phy,
+            "photon": "REAL",
+            "os_phy": dict(audit.get("os_phy") or {}),
+            "radios": radios_stamp(self.enabled),
             "remote_bearer": False,
             "bind": "127.0.0.1",
             "sticky_via": False,
             "softwares_tab": False,
             "mesh_enable": False,
+            "mesh_get_never_enables_radios": True,
             "node_gate": False,
             "az_generator": False,
             "call_az_generator": False,
@@ -194,7 +235,7 @@ class Fabric:
         }
 
     def enable(self, node: Any | None = None) -> dict[str, Any]:
-        """Allow the software channel path. Soft radios stay MOCK."""
+        """Allow the software channel path. OS PHYs stay LIVE|ABSENT."""
         self.enabled = True
         if node is not None:
             self.root = Path(getattr(node, "root", self.root or Path.cwd()))
@@ -210,9 +251,9 @@ class Fabric:
                 {
                     "enabled": True,
                     "channels_on": list(CHANNELS_ON),
-                    "channels_on_means": "software path allowed; not fielded PHY",
+                    "channels_on_means": "software path allowed; OS PHYs LIVE|ABSENT|REFUSED",
                     "radios": radios_stamp(True),
-                    "radios_status": "MOCK",
+                    "radios_status": "ABSENT",
                     "live_rf_mesh": False,
                     "az_generator": False,
                 },
@@ -393,7 +434,7 @@ class Fabric:
             "claim_is_stranger": True,
             "enabled": self.enabled,
             "radios": radios_stamp(self.enabled),
-            "radios_status": "MOCK",
+            "radios_status": "ABSENT",
             "radios_fielded": False,
             "live_rf_mesh": False,
             "spec": FABRIC_SPEC,

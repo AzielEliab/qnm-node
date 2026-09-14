@@ -29,17 +29,16 @@ def test_pipeline_doc_and_status_tell_the_truth() -> None:
     text = doc.read_text(encoding="utf-8")
     assert "ingress" in text.lower()
     assert "APG" in text
-    assert "lan, wifi, plc, bt, rf, light, qns, operator, local" in text
+    assert "lan, wifi, plc, bt, rf, gps, nfc, light, qns, operator, local" in text
     assert "AZ Generator" in text
     assert "does not get called" in text.lower() or "not called" in text.lower()
     assert "FRONT Node Gate" in text
     assert "MirageGrid" in text
     assert "external stranger" in text.lower() or "external stranger" in text
     assert "live RF mesh" not in text.lower() or "not invent a live RF mesh" in text
-    assert "**MOCK**" in text
+    assert "LIVE" in text and "ABSENT" in text
     assert "software path" in text.lower()
     assert "operator offline-verify" in text.lower()
-    assert "not fielded" in text.lower()
     fabric = Fabric()
     snap = fabric.status()
     assert snap["spec"] == FABRIC_SPEC
@@ -47,16 +46,17 @@ def test_pipeline_doc_and_status_tell_the_truth() -> None:
     assert snap["node_gate"] is False
     assert snap["live_rf_mesh"] is False
     assert snap["public_hostname_restore"] is False
-    assert snap["physical_vias"] == {
-        "bt": "MOCK",
-        "rf": "MOCK",
-        "wifi": "MOCK",
-        "light": "MOCK",
-    }
-    assert snap["radios_status"] == "MOCK"
+    assert snap["physical_vias"]["bt"] == "ABSENT"
+    assert snap["physical_vias"]["rf"] == "ABSENT"
+    assert snap["physical_vias"]["wifi"] == "ABSENT"
+    assert snap["physical_vias"]["gps"] == "ABSENT"
+    assert snap["physical_vias"]["nfc"] == "ABSENT"
+    assert snap["radios_status"] == "ABSENT"
     assert snap["radios_fielded"] is False
-    assert snap["photon_channel"] == "MOCK"
-    assert snap["bitmesh_channel"] == "MOCK"
+    assert snap["photon_channel"] == "ABSENT"
+    assert snap["channel_labels"]["local"] == "REAL"
+    assert snap["channel_labels"]["photon"] == "REAL"
+    assert snap["mock"] is False
     assert snap["via_order"] == list(VIA_ORDER)
     assert snap["miragegrid"]["called_from_qnm"] is False
     assert snap["miragegrid"]["back_gate"] is False
@@ -191,16 +191,18 @@ def test_walker_translate_declare_required_and_mocks(tmp_path: Path) -> None:
     from qnsd.vias.base import DECLARE_REQUIRED as BASE_DECLARE
 
     assert DECLARE_REQUIRED == BASE_DECLARE
-    assert "wifi" in DECLARE_REQUIRED
+    assert "plc" in DECLARE_REQUIRED
+    assert "light" in DECLARE_REQUIRED
+    assert "wifi" not in DECLARE_REQUIRED
     assert qnsd.stack.adapters["rf"].presence(qnsd.ctx()) == ABSENT
     assert qnsd.stack.adapters["plc"].presence(qnsd.ctx()) == ABSENT
     assert qnsd.stack.adapters["light"].presence(qnsd.ctx()) == ABSENT
     from qnsd.vias import bt, light, rf, wifi
 
-    assert bt.ADAPTER.device_hook == "MOCK"
-    assert rf.ADAPTER.device_hook == "MOCK"
-    assert wifi.ADAPTER.device_hook == "MOCK"
-    assert light.ADAPTER.device_hook == "MOCK"
+    assert bt.ADAPTER.device_hook == "os"
+    assert rf.ADAPTER.device_hook == "os"
+    assert wifi.ADAPTER.device_hook == "os"
+    assert light.ADAPTER.device_hook == "HOOK-PENDING"
     assert light.ADAPTER.protocol == "REAL"
     assert qnsd.stack.adapters["local"].mock is False
 
