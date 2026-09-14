@@ -5,7 +5,8 @@ Hub / Interface law remains AIH-WP-1.1. Author: Aziel Eliab only.
 
 Local process. Radios off. Receipts to disk. Poison refused, not
 interpreted. Tamper isolates. PHOENIX-LOCK waits / re-seals locally
-after poison or isolation (not public hostname restore). Tethers drop
+after poison or isolation (not public hostname restore). Split the
+wires: tick is presence+tip; payload is receiver-pull. Tethers drop
 clean. No account resurrection. AnonBroadcast is never a publish path.
 No Lumen/Mandible live symbols. No lattice_online / mesh_complete.
 Score never reads views. Pair-id is medium-independent — not Bell-pair
@@ -20,6 +21,7 @@ from qnm.node import STATES, Node
 from qnm.pairs import HOP_MAX_DEFAULT, compute_pair_id, handshake_seal
 from qnm.score import score_local
 from qnm.spiderweb import Spiderweb
+from qnm.wires import CITE_SOCKET, DWELL_S, TICK_BYTES, TICK_SOCKET, Wires
 
 __version__ = "1.1.0"
 __author__ = "Aziel Eliab"
@@ -36,6 +38,11 @@ __all__ = [
     "QNMRefuse",
     "STATES",
     "Spiderweb",
+    "TICK_BYTES",
+    "TICK_SOCKET",
+    "CITE_SOCKET",
+    "DWELL_S",
+    "Wires",
     "compute_install_root",
     "compute_pair_id",
     "handshake_seal",

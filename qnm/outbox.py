@@ -35,6 +35,15 @@ class Outbox:
         body = dict(payload or {})
         if body.get("publish") or kind in ("publish", "anon-broadcast-publish"):
             raise QNMRefuse("QNM-ANON-NO-PUBLISH", "outbox is not a publish path")
+        if kind in ("fanout-push", "fanout_push", "payload-push") or body.get("fanout_push"):
+            raise QNMRefuse(
+                "QNM-WIRES-NO-PUSH",
+                "payload on a second plane the receiver PULLS — never sender fan-out push",
+            )
+        if body.get("socket") == "tick" and any(
+            k in body for k in ("body", "diff", "file", "payload")
+        ):
+            raise QNMRefuse("QNM-WIRES-TICK", "no body/diff/file on the tick socket")
         item = {
             "id": sha256_hex(f"{kind}:{_utc_now()}:{json.dumps(body, sort_keys=True)}".encode()),
             "kind": kind,

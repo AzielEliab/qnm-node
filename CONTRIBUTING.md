@@ -25,7 +25,11 @@ Python 3.10+. Core is stdlib only. pytest is the dev extra. No network.
 5. Tamper isolates. No auto-heal.
 6. PHOENIX-LOCK waits / re-seals locally after poison or isolation.
    No controller hunt. Not public hostname restore. Public tunnels
-   and sites die with the pull.
+   and sites die with the pull. Neighbors do not phoenix because a
+   neighbor did.
+6b. SPLIT THE WIRES. Tick is presence + tip only. Payload is
+    receiver-pull. Update is a proof, not a timer. 1s loop and 777s
+    gate never share a socket.
 7. Tethers drop clean. No auto-rewire.
 8. No account resurrection.
 9. AnonBroadcast is never a publish path.

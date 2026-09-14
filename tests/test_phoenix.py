@@ -58,6 +58,16 @@ def test_arm_does_not_open_network(tmp_path: Path, monkeypatch: pytest.MonkeyPat
     assert node.state == "PHOENIX_LOCK"
 
 
+def test_neighbor_does_not_phoenix(tmp_path: Path) -> None:
+    node = Node(tmp_path)
+    node.boot(entropy=b"e", nonce=b"n")
+    with pytest.raises(QNMRefuse) as exc:
+        node.neighbor_phoenix("neighbor")
+    assert exc.value.code == "QNM-PHOENIX-LOCAL-WAIT"
+    assert node.state == "LOCAL"
+    assert node.phoenix.status()["public_restore"] is False
+
+
 def test_phoenix_forward_only(tmp_path: Path) -> None:
     node = Node(tmp_path)
     node.boot(entropy=b"e", nonce=b"n")

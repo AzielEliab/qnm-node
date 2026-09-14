@@ -3,6 +3,7 @@
 Visible corridors only. Cut drops clean: no leftover, no auto-rewire.
 Companion geometry is AIH-WP-1.1 (declared tethers, not Hub meaning).
 Pair-bind edges are AIH-WP-1.3 (medium-independent; not these tethers).
+Heartbeat loss does not apply a last packet and does not auto-rewire.
 """
 
 from __future__ import annotations

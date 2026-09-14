@@ -45,5 +45,14 @@
     "local"
   ],
   "always_present": ["local", "qns", "operator"],
-  "declare_required": ["rf", "plc", "light"]
+  "declare_required": ["rf", "plc", "light"],
+  "wires": {
+    "tick_socket": "tick",
+    "cite_socket": "cite",
+    "tick_bytes": 96,
+    "dwell_s": 777,
+    "fanout_push": false,
+    "auto_splice": false,
+    "vote_reconcile": false
+  }
 }

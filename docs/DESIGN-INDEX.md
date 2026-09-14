@@ -13,6 +13,8 @@ Companion to `QNM-BUILD-1.0.md` and `AIH-WP-1.3.md`.
 QNM-WP-1.0 absorbs BUILD+TOPO: local process ON, public rollup OFF and
 dies with the pull; GET /v1/mesh never enables. Phoenix is wait /
 re-seal after poison or isolation — not restore of a public hostname.
+SPLIT THE WIRES: tick is presence+tip; payload is receiver-pull; 1s
+loop and 777s gate never share a socket.
 
 QNS-CD-1.0 is the coding design for the local `qnsd` process (parents:
 QNS-WP-1.3 · QNM-BUILD-1.0 · AIH-WP-1.3 · APG · AZPIPE · ChainLock).

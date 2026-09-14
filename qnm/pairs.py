@@ -11,8 +11,9 @@ marriage license.
 
 THIS IS NOT Bell-pair physics. No qubit claims.
 
-Handshake: OFFER / ACCEPT / SEAL. Author: Aziel Eliab only.
-Companion node law: QNM-BUILD-1.0.
+Handshake: OFFER / ACCEPT / SEAL. Heartbeat loss does not cut a pair
+and is not poison. Author: Aziel Eliab only.
+Companion node law: QNM-BUILD-1.0. SPLIT THE WIRES.
 """
 
 from __future__ import annotations

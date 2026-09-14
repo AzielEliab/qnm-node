@@ -145,3 +145,12 @@ class Chain:
             "tip": self.tip,
             "errors": errors,
         }
+
+    def splice(self, *_args: object, **_kwargs: object) -> None:
+        raise QNMRefuse(
+            "QNM-WIRES-NO-SPLICE",
+            "split brain keeps separate chains, no auto-splice",
+        )
+
+    def merge(self, *_args: object, **_kwargs: object) -> None:
+        raise QNMRefuse("QNM-WIRES-AMBIGUOUS", "ambiguous tip = isolate not merge")

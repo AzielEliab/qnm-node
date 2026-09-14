@@ -27,6 +27,9 @@ _POISON_MARKERS = (
     "scorch_remote",
     "anon-broadcast/publish",
     "anon_broadcast_publish",
+    "fanout_push",
+    "vote_reconcile",
+    "auto_splice",
 )
 
 _POISON_RE = re.compile(

@@ -2,6 +2,7 @@
 
 local = on. All other bearers default off. Radios stay off. LIVE
 requires an explicit operator bearer. Site ping is not a bearer.
+Tick and cite are sockets on SPLIT THE WIRES — not extra radio bearers.
 """
 
 from __future__ import annotations

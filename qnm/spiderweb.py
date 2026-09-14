@@ -24,6 +24,7 @@ from typing import TYPE_CHECKING, Any
 
 from qnm.boot import AUTHOR, QNMRefuse, sha256_hex
 from qnm.pairs import HOP_MAX_DEFAULT, NODE_SPEC, PAIR_SPEC
+from qnm.wires import TICK_SOCKET
 
 if TYPE_CHECKING:
     from qnm.node import Node
@@ -111,6 +112,9 @@ class Spiderweb:
                 json.dumps(payload, sort_keys=True, separators=(",", ":"))
             )
         self._refuse_physics(admitted)
+        if (via or "") == TICK_SOCKET or admitted.get("socket") == TICK_SOCKET:
+            if any(k in admitted for k in ("body", "diff", "file")):
+                raise QNMRefuse("QNM-WIRES-TICK", "no body/diff/file on the tick socket")
         dest_k = str(dest).lower()
         src_k = str(src.install_root).lower()
         fid = frame_id(src_k, dest_k, admitted, salt)

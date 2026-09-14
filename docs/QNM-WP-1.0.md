@@ -96,15 +96,28 @@ QNM-WP-1.0                                                                      
  MirageGrid = ID assign. AzielTether = downloaded-copy survival. AZNet and AZMail are other slugs. TemporalLock /
  AZL-LEDGER record every mesh act. FragGate slug=mesh is Worker rollup, not the full node. That rollup dies with the pull.
 
- 10. Never / close tests
+ 10. Split the wires
+ Fast tick (0.5–1s): presence + tip hash only. Fixed-size. No body / diff / file on that socket.
+ Payload is a second plane the receiver PULLS — never sender fan-out push. Update is a proof, not a
+ timer: cite prev + lockset, fail-closed verify. 777s is dwell after a valid cite, not wait-then-accept.
+ Clock desync ≠ yes. Ambiguous tip = isolate, not merge. Same prev, two tips from one node → lock /
+ isolate that peer. No vote-to-reconcile. Quorum cannot outvote a broken hash. Announce tip only after
+ own verify. Phoenix is local WAIT for the failed node only — neighbors do not phoenix because a
+ neighbor did. Phoenix still does not restore a public hostname. Public tunnels die with the pull.
+ Split brain keeps separate chains; no auto-splice. Rejoin = cite + operator / lockset. Heartbeat loss
+ ≠ poison and ≠ apply last packet. The 1s loop and the 777s gate never share a socket.
+
+ 11. Never / close tests
    • Do not draw 25 peers on a public page that does not host them.
    • Do not enable mesh with a GET. Do not reuse a spent mesh_id.
    • Do not route inter-cell traffic through a leaf. Do not call MirageGrid a VPN.
    • Do not store passwords in node state. Do not claim qubits.
    • Do not read Phoenix as “bring the .uk / public node back.” Sites pulled → public rollup down.
      Local node may keep verifying and appending. Mesh does not climb back onto the public hostname by itself.
+   • Do not put a body on the tick socket. Do not fan-out push payload. Do not wait-then-accept.
+     Do not vote-to-reconcile. Do not auto-splice a split brain. Do not phoenix a neighbor.
    • Concept is closed when both planes, cell math, ID spend, leaf-vs-bridge poison, phoenix wait / re-seal
-     without hunt or hostname restore, die-with-pull, and stub names are specified — they are.
+     without hunt or hostname restore, die-with-pull, split-the-wires, and stub names are specified — they are.
  Specified 2026-09-06. Building qnm-node is implementation. This paper is the concept at 100%. Public identity: Aziel
  Eliab only.
 

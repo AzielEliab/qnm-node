@@ -35,12 +35,22 @@ class Phoenix:
             "no public hostname restore",
         )
 
+    def neighbor_arm(self, peer: str = "") -> None:
+        _ = peer
+        raise QNMRefuse(
+            "QNM-PHOENIX-LOCAL-WAIT",
+            "Phoenix is local reboot/WAIT for the failed node only — "
+            "neighbors do not phoenix because a neighbor did",
+        )
+
     def status(self) -> dict[str, Any]:
         return {
             "ok": True,
             "armed": self.armed,
             "waiting": "local" if self.waiting_local else "off",
             "controller_hunt": False,
+            "neighbor_phoenix": False,
+            "public_restore": False,
             "spec": SPEC,
             "author": AUTHOR,
         }

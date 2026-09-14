@@ -8,7 +8,8 @@ locally after poison or isolation — it does not restore a public
 hostname. Public tunnels and sites die with the pull. Local API binds
 127.0.0.1 only. Receipts go to disk. Radios stay off. Pair-id is
 medium-independent (AIH-WP-1.3). Isolation cuts pair edges. Not
-Bell-pair physics.
+Bell-pair physics. SPLIT THE WIRES: tick is presence+tip; payload
+is receiver-pull; 1s loop and 777s gate never share a socket.
 """
 
 from __future__ import annotations
@@ -45,6 +46,7 @@ from qnm.phoenix import Phoenix
 from qnm.score import score_local
 from qnm.spiderweb import Spiderweb
 from qnm.tethers import Tethers
+from qnm.wires import Wires
 
 STATES = (
     "COLD",
@@ -82,11 +84,17 @@ LOCAL_PATHS = {
     "/local/outbox/cut",
     "/local/phoenix/arm",
     "/local/receipts",
+    "/local/tick",
+    "/local/cite",
+    "/local/payload/pull",
+    "/local/payload/stash",
+    "/local/wires/rejoin",
+    "/local/heartbeat",
 }
 
 
 def ensure_data_dirs(root: Path) -> None:
-    for name in ("chain", "locks", "outbox", "receipts", "witness"):
+    for name in ("chain", "locks", "outbox", "receipts", "witness", "payload"):
         (Path(root) / "data" / name).mkdir(parents=True, exist_ok=True)
 
 
@@ -124,6 +132,7 @@ class Node:
         self.outbox = Outbox(self.root)
         self.tethers = Tethers(self.root)
         self.phoenix = Phoenix()
+        self.wires = Wires(self.root)
         self.memorial = Memorial(self.root)
         self.pairs = Pairs(self.memorial)
         self.spiderweb: Spiderweb | None = None
@@ -191,6 +200,7 @@ class Node:
             "auto_heal": False,
             "live_from_site_ping": False,
             "phoenix": self.phoenix.status(),
+            "wires": self.wires.snapshot(),
             "tethers": self.tethers.list(),
             "pairs": self.pairs.list(),
             "hop_max": HOP_MAX_DEFAULT,
@@ -291,6 +301,11 @@ class Node:
         if not verified["ok"]:
             return self.isolate("chain_hash_mismatch")
         return {"ok": True, "tamper": False, "chain": verified}
+
+    def neighbor_phoenix(self, peer: str = "") -> None:
+        """Neighbors do not phoenix because a neighbor did."""
+        self.phoenix.neighbor_arm(peer)
+        self.wires.neighbor_phoenix(peer)
 
     def arm_phoenix(self) -> dict[str, Any]:
         """Wait / re-seal locally. Does not restore a public hostname."""
@@ -512,8 +527,151 @@ class Node:
                 via=payload.get("via"),
                 hop_max=int(payload.get("hop_max") or HOP_MAX_DEFAULT),
             )
+        if op == "tick":
+            return self.tick(
+                peer=payload.get("peer"),
+                tip=payload.get("tip"),
+                presence=bool(payload.get("presence", True)),
+                extra=payload,
+            )
+        if op == "cite":
+            return self.cite_update(
+                prev=str(payload.get("prev") or ""),
+                tip=str(payload.get("tip") or ""),
+                lockset=dict(payload.get("lockset") or {}),
+                peer=str(payload.get("peer") or ""),
+            )
+        if op == "pull":
+            return self.pull_payload(str(payload.get("id") or payload.get("payload_id") or ""))
+        if op in ("fanout_push", "fanout-push"):
+            self.fanout_push()
+        if op in ("splice", "auto_splice", "merge"):
+            self.splice_chains()
         self._write_receipt("ingress", {"op": op})
         return {"ok": True, "admitted": True, "op": op, "state": self.state}
+
+    def tick(
+        self,
+        *,
+        peer: str | None = None,
+        tip: str | None = None,
+        presence: bool = True,
+        extra: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        self._require_not_scorched()
+        who = peer or (self.install_root or "")
+        verified = self.chain.verify()
+        use_tip = tip or str(verified["tip"])
+        rec = self.wires.tick(peer=who, tip=use_tip, presence=presence, extra=extra)
+        self._write_receipt("tick", {"peer": who, "tip": use_tip, "presence": presence})
+        rec["state"] = self.state
+        return rec
+
+    def announce_tip(self, *, peer: str | None = None) -> dict[str, Any]:
+        self._require_not_scorched()
+        verified = self.chain.verify()
+        rec = self.wires.announce(
+            peer=peer or (self.install_root or ""),
+            tip=str(verified["tip"]),
+            verified=bool(verified["ok"]),
+        )
+        self._write_receipt("announce_tip", {"tip": rec["tip"], "verified": True})
+        return rec
+
+    def stash_payload(self, body: dict[str, Any] | str | bytes) -> dict[str, Any]:
+        self._require_not_scorched()
+        rec = self.wires.stash_payload(body)
+        self._write_receipt("payload_stash", {"id": rec["id"], "pushed": False})
+        return rec
+
+    def pull_payload(self, payload_id: str) -> dict[str, Any]:
+        self._require_not_scorched()
+        rec = self.wires.pull_payload(payload_id)
+        self._write_receipt("payload_pull", {"id": payload_id})
+        return rec
+
+    def fanout_push(self, *_args: object, **_kwargs: object) -> None:
+        self.wires.fanout_push()
+
+    def _lock_equivocating_peer(self, peer: str) -> None:
+        self.wires.lock_peer(peer)
+        if self.install_root and self.pairs.has_edge(peer):
+            for item in list(self.pairs.list()):
+                if str(item.get("peer") or "").lower() == str(peer).lower():
+                    self.pairs.cut(str(item["pair_id"]))
+        # Failed peer waits locally if it is this node. Neighbors do not phoenix.
+        if self.install_root and str(peer).lower() == str(self.install_root).lower():
+            if self.state not in ("PHOENIX_LOCK", "SCORCHED"):
+                self.arm_phoenix()
+
+    def cite_update(
+        self,
+        *,
+        prev: str,
+        tip: str,
+        lockset: dict[str, Any],
+        peer: str,
+        now: float | None = None,
+        clock_skew_s: float = 0,
+    ) -> dict[str, Any]:
+        self._require_not_scorched()
+        try:
+            rec = self.wires.cite(
+                prev=prev,
+                tip=tip,
+                lockset=lockset,
+                peer=peer,
+                now=now,
+                clock_skew_s=clock_skew_s,
+            )
+        except QNMRefuse as exc:
+            if exc.code == "QNM-WIRES-EQUIVOCATION":
+                self._lock_equivocating_peer(peer)
+            raise
+        self._write_receipt("cite", {"id": rec["id"], "peer": peer, "prev": prev, "tip": tip})
+        rec["state"] = self.state
+        return rec
+
+    def merge_tips(self, *_args: object, **_kwargs: object) -> dict[str, Any]:
+        if self.state not in ("ISOLATED", "PHOENIX_LOCK", "SCORCHED"):
+            self.isolate("ambiguous_tip")
+        raise QNMRefuse("QNM-WIRES-AMBIGUOUS", "ambiguous tip = isolate not merge")
+
+    def splice_chains(self, *_args: object, **_kwargs: object) -> None:
+        self.chain.splice()
+        self.wires.splice()
+
+    def rejoin_partition(
+        self,
+        *,
+        prev: str,
+        tip: str,
+        lockset: dict[str, Any],
+        peer: str,
+        operator: bool = False,
+        now: float | None = None,
+    ) -> dict[str, Any]:
+        self._require_not_scorched()
+        rec = self.wires.rejoin(
+            prev=prev,
+            tip=tip,
+            lockset=lockset,
+            peer=peer,
+            operator=operator,
+            now=now,
+        )
+        self._write_receipt("wires_rejoin", {"id": rec["id"], "peer": peer})
+        rec["state"] = self.state
+        return rec
+
+    def heartbeat_miss(self, peer: str, misses: int | None = None) -> dict[str, Any]:
+        self._require_not_scorched()
+        rec = self.wires.heartbeat_miss(peer, misses)
+        self._write_receipt(
+            "heartbeat_miss",
+            {"peer": peer, "misses": rec["misses"], "poison": False, "applied": False},
+        )
+        return rec
 
     def score(self, extra: dict[str, Any] | None = None) -> dict[str, Any]:
         verified = self.chain.verify()
@@ -631,6 +789,45 @@ class Node:
             return self.cut_outbox(str(payload.get("id") or ""))
         if route == "/local/phoenix/arm" and method == "POST":
             return self.arm_phoenix()
+        if route == "/local/tick" and method == "POST":
+            payload = json.loads(body.decode("utf-8") or "{}") if body else {}
+            extra = payload if any(k in payload for k in ("body", "diff", "file", "payload")) else None
+            return self.tick(
+                peer=payload.get("peer"),
+                tip=payload.get("tip"),
+                presence=bool(payload.get("presence", True)),
+                extra=extra,
+            )
+        if route == "/local/cite" and method == "POST":
+            payload = json.loads(body.decode("utf-8") or "{}") if body else {}
+            return self.cite_update(
+                prev=str(payload.get("prev") or ""),
+                tip=str(payload.get("tip") or ""),
+                lockset=dict(payload.get("lockset") or {}),
+                peer=str(payload.get("peer") or ""),
+                clock_skew_s=float(payload.get("clock_skew_s") or 0),
+            )
+        if route == "/local/payload/stash" and method == "POST":
+            payload = json.loads(body.decode("utf-8") or "{}") if body else {}
+            return self.stash_payload(dict(payload.get("body") or payload))
+        if route == "/local/payload/pull" and method == "POST":
+            payload = json.loads(body.decode("utf-8") or "{}") if body else {}
+            return self.pull_payload(str(payload.get("id") or ""))
+        if route == "/local/wires/rejoin" and method == "POST":
+            payload = json.loads(body.decode("utf-8") or "{}") if body else {}
+            return self.rejoin_partition(
+                prev=str(payload.get("prev") or ""),
+                tip=str(payload.get("tip") or ""),
+                lockset=dict(payload.get("lockset") or {}),
+                peer=str(payload.get("peer") or ""),
+                operator=bool(payload.get("operator")),
+            )
+        if route == "/local/heartbeat" and method == "POST":
+            payload = json.loads(body.decode("utf-8") or "{}") if body else {}
+            return self.heartbeat_miss(
+                str(payload.get("peer") or ""),
+                misses=payload.get("misses"),
+            )
         raise QNMRefuse("QNM-LOOPBACK-ONLY", f"{method} {route}")
 
 
@@ -718,6 +915,13 @@ def main(argv: list[str] | None = None) -> int:
                 "bell_pair": False,
                 "qubit": False,
                 "forbidden_live_symbols": ["Lumen", "Mandible", "lattice_online", "mesh_complete"],
+                "wires": {
+                    "tick_socket": "tick",
+                    "cite_socket": "cite",
+                    "split": True,
+                    "dwell_s": 777,
+                    "fanout_push": False,
+                },
             }
             print(json.dumps(report, indent=2, sort_keys=True))
             return 0

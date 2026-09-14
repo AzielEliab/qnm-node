@@ -29,14 +29,17 @@ Aziel Eliab only. No other author name. No account object. A node is an
 - No **Lumen** / **Mandible** live symbols.
 - No **lattice_online** / **mesh_complete**.
 - **Score never reads views**.
+- **SPLIT THE WIRES.** Fast tick is presence + tip hash only.
+  Payload is receiver-pull. 1s loop and 777s gate never share a
+  socket.
 
 ## §3 Tree
 
 ```
-qnm/{boot,node,chain,apg,bearers,outbox,phoenix,score,memorial,tethers,pairs,spiderweb}.py
+qnm/{boot,node,chain,apg,bearers,outbox,phoenix,score,memorial,tethers,pairs,spiderweb,wires}.py
 modules/anon-broadcast/          loopback-only
 cfg/node.json
-data/{chain,locks,outbox,receipts,witness}
+data/{chain,locks,outbox,receipts,witness,payload}
 docs/{QNM-BUILD-1.0,AIH-WP-1.3}.md
 tests/                           §14 + AIH-WP-1.3
 ```
@@ -65,6 +68,8 @@ the pull**. Local API binds **127.0.0.1** only:
 `/local/pair` `/local/pairs` `/local/forward`
 `/local/ingress` `/local/outbox` `/local/outbox/cut`
 `/local/phoenix/arm` `/local/receipts`
+`/local/tick` `/local/cite` `/local/payload/pull` `/local/payload/stash`
+`/local/wires/rejoin` `/local/heartbeat`
 
 ## §6 Bearers
 
@@ -118,6 +123,36 @@ SCORCHED writes `data/witness/memorial.json`, marks the lock scorched,
 clears tethers and outbox. `account_resurrect` / `account_restore` /
 `account_create` refuse (`QNM-NO-ACCOUNT`).
 
+## §15 SPLIT THE WIRES
+
+Two sockets. They never share a name.
+
+- **Tick** (0.5–1s): presence + tip hash only. Fixed-size
+  (`TICK_BYTES = 96`). No body / diff / file on that socket
+  (`QNM-WIRES-TICK`).
+- **Payload** is a second plane the receiver **PULLS**. Sender
+  fan-out push is refused (`QNM-WIRES-NO-PUSH`).
+- **Update is a proof, not a timer.** Cite `prev` + lockset.
+  Fail-closed verify. **777s is dwell after a valid cite**, not
+  wait-then-accept (`QNM-WIRES-PROOF`). Clock desync ≠ yes
+  (`QNM-WIRES-CLOCK`). Ambiguous tip = isolate, not merge
+  (`QNM-WIRES-AMBIGUOUS`).
+- **Equivocation:** same prev, two tips from one node → lock /
+  isolate that peer. No vote-to-reconcile. Quorum cannot outvote a
+  broken hash (`QNM-WIRES-EQUIVOCATION`, `QNM-WIRES-QUORUM`).
+- **Emit last locally.** Announce a tip only after own verify
+  (`QNM-WIRES-EMIT-LAST`). Phoenix is local reboot / WAIT for the
+  failed node only — neighbors do not phoenix because a neighbor
+  did. No unsend of unverified body (`QNM-WIRES-NO-UNSEND`).
+  Phoenix still does **not** restore a public hostname. Public
+  tunnels die with the pull.
+- **Partition:** split brain keeps separate chains. No auto-splice
+  (`QNM-WIRES-NO-SPLICE`). Rejoin = cite + operator / lockset
+  (`QNM-WIRES-REJOIN`). Heartbeat loss ≠ poison and ≠ apply last
+  packet (`QNM-WIRES-HEARTBEAT`).
+- The 1s loop and the 777s gate **never share a socket**
+  (`QNM-WIRES-SPLIT`).
+
 ## §14 Tests (ship these)
 
 | File | Law |
@@ -125,10 +160,11 @@ clears tethers and outbox. `account_resurrect` / `account_restore` /
 | `tests/test_offline.py` | Radios off; two roots; resume locks only; no LIVE from ping; no auto-heal; receipts on disk; 127.0.0.1 API |
 | `tests/test_apg.py` | Every ingress through APG; poison refused not interpreted |
 | `tests/test_tamper.py` | Tamper isolates; no auto-heal out of ISOLATED |
-| `tests/test_phoenix.py` | PHOENIX-LOCK waits / re-seals locally; no controller hunt; not public hostname restore |
+| `tests/test_phoenix.py` | PHOENIX-LOCK waits / re-seals locally; no controller hunt; not public hostname restore; neighbors do not phoenix |
 | `tests/test_tether.py` | Tethers drop clean |
 | `tests/test_no_account.py` | No account resurrection; identity Aziel Eliab; score ignores views; anon-broadcast never publishes |
 | `tests/test_spiderweb.py` | AIH-WP-1.3: pair survives bearer off; forward along spiderweb with APG; isolated node has no edges; hop_max / loop drop |
+| `tests/test_wires.py` | SPLIT THE WIRES: fixed tick; receiver-pull; proof not timer; 777s dwell; equivocation lock; isolate not merge; emit-last; neighbor no-phoenix; no auto-splice; heartbeat ≠ poison |
 
 ## Cite
 

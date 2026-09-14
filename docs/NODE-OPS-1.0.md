@@ -90,6 +90,7 @@ NODE-OPS-1.0                                                                    
   • Phoenix does not un-scorch a vault.
   • Poison does not forward across cell edges.
   • Three missed heartbeats = suspect. Suspect + APG hit = isolate.
+    Heartbeat loss alone ≠ poison and ≠ apply last packet.
   • Bridge poison rotates both bridges before inter-cell traffic.
   • Held publish queue does not flush across phoenix without a new operator act.
   • Phoenix does not un-pull a site, re-issue a tunnel token, or rewrite DNS.
@@ -120,15 +121,30 @@ NODE-OPS-1.0                                                                    
 
 
 6. Receipts
-Every node writes AZL-LEDGER kinds: boot, heartbeat, refuse, isolate, phoenix, assign, rotate, tether_cut, hold. No model
+Every node writes AZL-LEDGER kinds: boot, heartbeat, refuse, isolate, phoenix, assign, rotate, tether_cut, hold, tick, cite. No model
 sentence. No token body.
 
-7. Close tests
+7. Split the wires
+  • Fast 0.5–1s tick: presence + tip hash only. Fixed-size. No body / diff / file on that socket.
+  • Payload on a second plane the receiver PULLS — never sender fan-out push.
+  • Update is a proof not a timer: cite prev + lockset, fail-closed verify. 777s = dwell after
+    valid cite (not wait-then-accept). Clock desync ≠ yes. Ambiguous tip = isolate not merge.
+  • Equivocation: same prev, two tips from one node → lock / isolate that peer. No vote-to-reconcile.
+    Quorum cannot outvote a broken hash.
+  • Emit last locally: announce tip only after own verify. Phoenix is local reboot / WAIT for the
+    failed node only — neighbors do not phoenix because a neighbor did. No unsend of unverified body.
+    Phoenix is still not public hostname restore. Public tunnels die with the pull.
+  • Partition: split brain keeps separate chains, no auto-splice. Rejoin = cite + operator / lockset.
+  • The 1s loop and the 777s gate never share a socket.
+
+8. Close tests
   • Public faces have no enable switch and no vault unlock.
   • Door stubs refuse and the refuse is a receipt.
   • qnm-node is not reachable off loopback in default config.
   • Spent mesh_id rejected on later local cell join. Phoenix wait has no outbound hunt packet.
   • Phoenix does not restore a public hostname. Pulled sites stay down (die with the pull).
+  • Tick socket carries no body. Fan-out push refused. Cite fail-closed. 1s and 777s sockets stay split.
+  • Equivocation locks the peer. Neighbors do not phoenix. No auto-splice. Heartbeat loss does not apply.
   • Held queue does not flush across phoenix without a new act.
   • ARK hosted unlock remains stub. Cell does not halt when one leaf isolates.
 Does not add a Node Gate to “see security.” Does not turn MirageGrid into a VPN. Does not publish exploit recipes. Public

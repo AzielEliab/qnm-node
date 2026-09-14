@@ -46,6 +46,11 @@ or a qubit machine.
 - Public tunnels and sites **die with the pull**. Mesh does not climb
   back onto the public hostname by itself. Local node may keep
   verifying and appending after a pull.
+- **SPLIT THE WIRES.** Fast tick is presence + tip hash only.
+  Payload is receiver-pull. Update is a proof (cite + lockset), not
+  a timer. 777s is dwell after a valid cite. 1s loop and 777s gate
+  never share a socket. Neighbors do not phoenix because a neighbor
+  did.
 - Tethers **drop clean**
 - **No account resurrection**
 - AnonBroadcast is **never a publish path**
@@ -114,6 +119,12 @@ Local API binds **127.0.0.1:8891** only:
 | `GET /local/outbox` | Visible queue |
 | `POST /local/outbox/cut` | Drop one item |
 | `POST /local/phoenix/arm` | Wait / re-seal locally (not public hostname restore) |
+| `POST /local/tick` | Presence + tip hash only (fixed-size) |
+| `POST /local/cite` | Proof cite (prev + lockset); 777s dwell after |
+| `POST /local/payload/stash` | Store payload locally (not a push) |
+| `POST /local/payload/pull` | Receiver-pull payload plane |
+| `POST /local/wires/rejoin` | Cite + operator/lockset; no auto-splice |
+| `POST /local/heartbeat` | Miss record; not poison; not apply |
 | `GET /local/receipts` | Disk receipts |
 
 `qnsd` adds `POST /local/policy` and `POST /local/declare` on the same
@@ -138,12 +149,12 @@ still implement `ViaAdapter`. See [docs/QNS-CD-1.0.md](docs/QNS-CD-1.0.md)
 ```
 qnm/                 boot, node, chain, apg, bearers, outbox,
                      phoenix, score, memorial, tethers,
-                     pairs, spiderweb
+                     pairs, spiderweb, wires
 qnsd/                QNS-CD-1.0 daemon: photon, walker, vias, light,
                      azpipe, policy, api (127.0.0.1)
 modules/anon-broadcast/   loopback-only style tool (never a publish path)
 cfg/node.json
-data/{chain,locks,outbox,receipts,witness}
+data/{chain,locks,outbox,receipts,witness,payload}
 docs/QNM-BUILD-1.0.md
 docs/AIH-WP-1.3.md
 docs/QNS-CD-1.0.md   (+ PDF companion note)
@@ -160,8 +171,9 @@ python -m pytest -q
 
 Offline. Covers radios-off / two roots / lock resume, APG poison,
 tamper isolate, PHOENIX-LOCK local wait / re-seal (not public hostname
-restore), clean tether cut, no account resurrection, pair survives
-bearer off, spiderweb forward
+restore), SPLIT THE WIRES (fixed tick, receiver-pull, proof not timer,
+neighbor no-phoenix, no auto-splice), clean tether cut, no account
+resurrection, pair survives bearer off, spiderweb forward
 with APG, isolated node has no edges, hop_max / loop drop, and QNS-CD
 via Protocol / walker / light OCC / lock-backed outbox wait / pair-cut
 emit stop.
