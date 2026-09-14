@@ -47,6 +47,7 @@ from qnm.chain import Chain
 from qnm.bitmesh import Bitmesh, refuse_public_geo
 from qnm.coldcopy import DEVICE_CLASSES, ColdCopy
 from qnm.fabric import CLAIM_CLOCK, FABRIC_SPEC, Fabric
+from qnm.planes import Planes
 from qnm.unkillability import compute_unkillability
 from qnm.memorial import Memorial
 from qnm.nolie import NoLie, receipt_digest
@@ -110,6 +111,7 @@ LOCAL_PATHS = {
     "/local/persist",
     "/local/bitmesh",
     "/local/unkillability",
+    "/local/planes",
 }
 
 MESH_NEVER_ENABLE = frozenset(
@@ -132,6 +134,7 @@ def ensure_data_dirs(root: Path) -> None:
         "vault",
         "archive",
         "bitmesh",
+        "planes",
     ):
         (Path(root) / "data" / name).mkdir(parents=True, exist_ok=True)
 
@@ -190,6 +193,7 @@ class Node:
         self.nolie = NoLie(self.root)
         self.fabric = Fabric(self.root)
         self.bitmesh = Bitmesh(self.root)
+        self.planes = Planes(self.root, cfg=self.cfg)
         self.qnsd: Any | None = None
         self.memorial = Memorial(self.root)
         self.pairs = Pairs(self.memorial)
@@ -295,6 +299,7 @@ class Node:
             "fabric": self.fabric.status(),
             "bitmesh": self.bitmesh.status(),
             "unkillability": self.unkillability(),
+            "planes": self.planes.snapshot(),
             "node_gate": False,
             "az_generator": False,
             "call_az_generator": False,
@@ -709,6 +714,10 @@ class Node:
             return self.bind_bitmesh(payload)
         if op == "fabric_enable":
             return self.enable_fabric()
+        if op in ("planes", "plane_b", "plane_c", "unkillability"):
+            if op == "unkillability":
+                return self.unkillability()
+            return self.planes_act(payload)
         if op in ("live_sync", "push", "unsend", "splice"):
             return self._refuse_wire_op(op)
         if op == "reheal":
@@ -949,7 +958,7 @@ class Node:
         return snap
 
     def unkillability(self, extra: dict[str, Any] | None = None) -> dict[str, Any]:
-        """Pissed-off-gov erasure cost. Target 80+. Not a live PHY claim."""
+        """Pissed-off-gov erasure cost. Fielded target needs Plane B+C."""
         if extra and "views" in extra:
             raise QNMRefuse("QNM-SCORE-NO-VIEWS", "unkillability never reads views")
         hosts = {str(row.get("host") or "") for row in self.vault.replicas()}
@@ -957,13 +966,42 @@ class Node:
         replica_n = len(hosts)
         if self.chain.tip:
             replica_n = max(replica_n, self.vault.replica_count(self.chain.tip))
+        planes = self.planes.snapshot()
         return compute_unkillability(
             fabric_enabled=self.fabric.enabled,
             persist_devices=persist,
             replica_n=replica_n,
             bitmesh_binds=len(self.bitmesh.list()),
             views=extra.get("views") if extra else None,
+            plane_b_doi=planes["plane_b"].get("doi"),
+            plane_c_offline_verify=bool(planes["plane_c"].get("offline_verify")),
+            planes=planes,
         )
+
+    def planes_act(self, payload: dict[str, Any] | None = None) -> dict[str, Any]:
+        """Seat or verify planes. Refuses invented DOI / airgap success."""
+        self._require_not_scorched()
+        body = dict(payload or {})
+        op = str(body.get("op") or body.get("action") or "status")
+        if op in ("invent_doi", "fake_doi"):
+            self.planes.refuse_invent_doi()
+        if op in ("invent_airgap", "fake_verify"):
+            self.planes.refuse_invent_airgap()
+        if op in ("seat_b", "zenodo", "doi"):
+            rec = self.planes.seat_zenodo_doi(body.get("doi"))
+            self._write_receipt("plane_b_doi", {"doi": rec.get("doi"), "status": rec.get("status")})
+            return rec
+        if op in ("clear_b", "clear_doi"):
+            return self.planes.clear_zenodo_doi()
+        if op in ("verify_c", "airgap", "offline_verify"):
+            raw = body.get("body") or body.get("pack") or b""
+            rec = self.planes.verify_airgap(raw, pack_tip=body.get("pack_tip"))
+            self._write_receipt(
+                "plane_c_offline_verify",
+                {"pack_tip": rec["pack_tip"], "offline_verify": True},
+            )
+            return rec
+        return self.planes.snapshot()
 
     def _seat_verified_tip(self, *, append_boot: bool) -> None:
         _ = append_boot
@@ -1290,6 +1328,11 @@ class Node:
             return self.bind_bitmesh(payload)
         if route == "/local/unkillability" and method == "GET":
             return self.unkillability()
+        if route == "/local/planes" and method == "GET":
+            return self.planes.snapshot()
+        if route == "/local/planes" and method == "POST":
+            payload = json.loads(body.decode("utf-8") or "{}") if body else {}
+            return self.planes_act(payload)
         raise QNMRefuse("QNM-LOOPBACK-ONLY", f"{method} {route}")
 
 

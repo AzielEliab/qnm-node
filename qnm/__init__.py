@@ -32,8 +32,9 @@ from qnm.fabric import FABRIC_SPEC, Fabric
 from qnm.node import STATES, Node
 from qnm.pairs import HOP_MAX_DEFAULT, compute_pair_id, handshake_seal
 from qnm.score import score_local
+from qnm.planes import PLANES_SPEC, Planes
 from qnm.unkillability import TARGET as UNKILL_TARGET
-from qnm.unkillability import UNKILL_SPEC, compute_unkillability
+from qnm.unkillability import FIELDED_BAND, UNKILL_SPEC, compute_unkillability
 from qnm.spiderweb import Spiderweb
 from qnm.nolie import NoLie
 from qnm.wires import Wires
@@ -52,6 +53,7 @@ __norewrite__ = "NO-REWRITE-1.0"
 __fabric__ = FABRIC_SPEC
 __bitmesh__ = BITMESH_SPEC
 __unkill__ = UNKILL_SPEC
+__planes__ = PLANES_SPEC
 __pair_bind__ = "AIH-WP-1.3"
 __hub_law__ = "AIH-WP-1.1"
 
@@ -67,9 +69,12 @@ __all__ = [
     "HOP_MAX_DEFAULT",
     "NoLie",
     "Node",
+    "PLANES_SPEC",
+    "Planes",
     "QNMRefuse",
     "STATES",
     "Spiderweb",
+    "FIELDED_BAND",
     "UNKILL_SPEC",
     "UNKILL_TARGET",
     "Wires",

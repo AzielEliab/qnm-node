@@ -49,7 +49,7 @@ or a call into AZ Generator.
 |------|------|
 | **REAL** | Local 127.0.0.1 process. APG refuse-first. Split-wires tip + dwell clocks. Photon (`QNS1` 1.3) codec + walker + translate. Outbox / receipts / chain on disk. Cold copies, multi-device persist/transfer, archive re-expand, own-tip reheal, phoenix-WAIT. Loopback bind. Remote bearer stays off. |
 | **MOCK / HOOK-PENDING** | Bluetooth, RF, Wi-Fi, and camera/emitter **device hooks**. Protocol-complete (`ViaAdapter`). Invented live hardware is forbidden. Fabric enable **arms** these channels; emit without a PHY driver is `QNS-HOOK-PENDING`, not a live packet. PLC is software-declared (no invented PHY). |
-| **LAW** | CROSS-NETWORK-SURVIVAL / REHEAL / SPLIT-WIRES / COLD-COPY / NO-LIE / NO-REWRITE / QNS-CD / FABRIC-MESH-PIPELINE ALL-CHANNELS-ON. Internal bitmesh geo only — public receipts stay no user/geo. `GET /v1/mesh` never enables. No Softwares-tab product. AZ Generator is not called from qnm. Identity Aziel Eliab only. |
+| **LAW** | CROSS-NETWORK-SURVIVAL / REHEAL / SPLIT-WIRES / COLD-COPY / NO-LIE / NO-REWRITE / QNS-CD / FABRIC-MESH-PIPELINE ALL-CHANNELS-ON. Internal bitmesh geo only — public receipts stay no user/geo. Unkillability **architecture ≠ fielded**; hubs must not publish 100. Plane B DOI is SLOT/null until seated; Plane C READY ≠ offline-verify. `GET /v1/mesh` never enables. No Softwares-tab product. AZ Generator is not called from qnm. Identity Aziel Eliab only. |
 
 MirageGrid **Node Gate** is an **outward claim surface** fed by a
 deep-node AZ Generator. That generator is **not called** from qnm.
@@ -166,7 +166,8 @@ Local API binds **127.0.0.1:8891** only:
 | `GET/POST /local/fabric` | Pipeline status / enable (arms channels) / one local pass (never calls AZ Generator) |
 | `POST /local/persist` | Multi-device vault-on-transfer (laptop / phone / watch / radio / bluetooth) |
 | `GET/POST /local/bitmesh` | Internal geohash bind (not public ACT-RECEIPT geo) |
-| `GET /local/unkillability` | Pissed-off-gov erasure cost (target 80+; REAL/MOCK labeled; not a live PHY claim) |
+| `GET /local/unkillability` | Architecture vs fielded erasure cost. `score` = fielded (68–70 until Plane B DOI + Plane C offline verify). Hubs must not publish architecture 100. |
+| `GET/POST /local/planes` | Plane A/B/C facts. Refuse invented DOI or airgap success. |
 
 `qnsd` adds `POST /local/policy` and `POST /local/declare` on the same
 loopback bind (port from `cfg/node.json`, default 8891).
