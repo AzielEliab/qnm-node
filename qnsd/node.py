@@ -112,7 +112,9 @@ class Node:
         self.stack = ViaStack(ADAPTERS, self.policy)
         self.camera_deny = False
         self.lan_link = False
+        self.fabric_armed = False
         self._load_state_lock()
+        self._load_fabric()
 
     def ctx(self) -> ViaContext:
         return ViaContext(
@@ -120,7 +122,61 @@ class Node:
             declared=dict(self.declared),
             camera_deny=self.camera_deny,
             lan_link=self.lan_link,
+            fabric_armed=self.fabric_armed,
         )
+
+    def arm_fabric(self) -> dict[str, Any]:
+        """Arm RF / BT / Wi-Fi / photon. PHY hooks stay HOOK-PENDING."""
+        self.fabric_armed = True
+        for name in ("rf", "bt", "wifi", "light", "lan", "plc"):
+            rec = dict(self.declared.get(name) or {})
+            rec["via"] = name
+            rec.setdefault("armed", True)
+            if name == "lan":
+                rec.setdefault("link", True)
+                self.lan_link = True
+            if name == "rf":
+                rec.setdefault("profile", "armed")
+            if name == "plc":
+                rec.setdefault("domain", "armed")
+            if name == "wifi":
+                rec.setdefault("link", True)
+            self.declared[name] = rec
+        self._persist_declared()
+        self._persist_fabric()
+        self._write_receipt(
+            "fabric_arm",
+            {"armed": True, "live_rf_mesh": False, "az_generator": False},
+        )
+        return {
+            "ok": True,
+            "armed": True,
+            "fabric_armed": True,
+            "live_rf_mesh": False,
+            "presence": {name: self.stack.adapters[name].presence(self.ctx()) for name in VIA_ORDER},
+            "spec": SPEC,
+            "author": AUTHOR,
+        }
+
+    def _fabric_path(self) -> Path:
+        return self.root / "data" / "locks" / "fabric.json"
+
+    def _persist_fabric(self) -> None:
+        self._fabric_path().write_text(
+            json.dumps(
+                {"enabled": self.fabric_armed, "spec": SPEC, "author": AUTHOR},
+                sort_keys=True,
+                indent=2,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+
+    def _load_fabric(self) -> None:
+        path = self._fabric_path()
+        if path.is_file():
+            data = json.loads(path.read_text(encoding="utf-8"))
+            self.fabric_armed = bool(data.get("enabled") or data.get("armed"))
 
     def _advance(self, dest: str) -> None:
         if dest == self.state:
@@ -155,7 +211,9 @@ class Node:
             "presence": presences,
             "declared": dict(self.declared),
             "policy": self.policy.snapshot(),
-            "radios": "off",
+            "radios": "armed" if self.fabric_armed else "off",
+            "fabric_armed": self.fabric_armed,
+            "live_rf_mesh": False,
             "sticky_via": False,
             "auto_heal": False,
             "live_from_site_ping": False,

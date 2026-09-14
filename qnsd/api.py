@@ -39,6 +39,7 @@ LOCAL_PATHS = {
     "/local/outbox/cut",
     "/local/receipts",
     "/local/phoenix/arm",
+    "/local/fabric",
 }
 
 
@@ -178,6 +179,24 @@ def _dispatch(node: Node, method: str, route: str, body: bytes) -> dict[str, Any
         return node.cut_outbox(str(payload.get("id") or ""))
     if route == "/local/phoenix/arm" and method == "POST":
         return node.arm_phoenix()
+    if route == "/local/fabric" and method == "GET":
+        return {
+            "ok": True,
+            "armed": node.fabric_armed,
+            "radios": "armed" if node.fabric_armed else "off",
+            "live_rf_mesh": False,
+            "via_order": list(node.snapshot()["via_order"]),
+            "presence": node.snapshot()["presence"],
+            "az_generator": False,
+            "spec": SPEC,
+            "author": AUTHOR,
+        }
+    if route == "/local/fabric" and method == "POST":
+        payload = json.loads(body.decode("utf-8") or "{}") if body else {}
+        op = str(payload.get("op") or payload.get("action") or "enable")
+        if op in ("enable", "arm"):
+            return node.arm_fabric()
+        raise QNSRefuse("QNM-LOOPBACK-ONLY", f"unknown fabric op:{op}")
     raise QNSRefuse("QNM-LOOPBACK-ONLY", f"{method} {route}")
 
 
@@ -212,7 +231,7 @@ def main(argv: list[str] | None = None) -> int:
                 "spec": SPEC,
                 "via_order": list(node.snapshot()["via_order"]),
                 "bind": DEFAULT_BIND,
-                "radios": "off",
+                "radios": "armed" if node.fabric_armed else "off",
                 "sticky_via": False,
                 "softwares_tab": False,
                 "node_gate": False,

@@ -8,6 +8,9 @@
   "bind": "127.0.0.1",
   "port": 8891,
   "radios": "off",
+  "all_channels_on_when_fabric": true,
+  "bitmesh_geo": "internal-only",
+  "public_receipt_geo": false,
   "auto_heal": false,
   "live_from_site_ping": false,
   "anon_broadcast_publish": false,
@@ -19,6 +22,8 @@
     "operator": false,
     "lan": false,
     "radio": false,
+    "wifi": false,
+    "bt": false,
     "remote": false
   },
   "forbidden_live_symbols": [
@@ -42,6 +47,7 @@
   "mesh_enable": false,
   "via_order": [
     "lan",
+    "wifi",
     "plc",
     "bt",
     "rf",
@@ -51,7 +57,7 @@
     "local"
   ],
   "always_present": ["local", "qns", "operator"],
-  "declare_required": ["rf", "plc", "light"],
+  "declare_required": ["rf", "plc", "light", "wifi"],
   "split_wires": true,
   "tick_min_s": 0.5,
   "tick_max_s": 1.0,

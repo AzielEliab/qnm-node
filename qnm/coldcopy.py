@@ -31,6 +31,14 @@ from qnm.wires import HASH_LEN, WIRES_SPEC, canonical_hash
 COLD_SPEC = "COLD-COPY-1.0"
 DEFAULT_N = 3
 NAMED_HOST_RE = re.compile(r"^[A-Za-z][A-Za-z0-9._-]{0,63}$")
+DEVICE_CLASSES = (
+    "laptop",
+    "phone",
+    "apple-watch",
+    "phone-watch",
+    "radio",
+    "bluetooth",
+)
 FORBIDDEN_HOSTS = frozenset(
     {
         "*",
@@ -65,7 +73,7 @@ class ColdCopy:
         self.origin_alive = True
         self.worker_alive = True
         self.dns_alive = True
-        self.named_hosts: set[str] = {"local", "mesh-vault", "reader"}
+        self.named_hosts: set[str] = {"local", "mesh-vault", "reader", *DEVICE_CLASSES}
 
     def status(self) -> dict[str, Any]:
         replicas = self.replicas()
@@ -89,6 +97,8 @@ class ColdCopy:
             "vpn_concealment": False,
             "creator_session_required": False,
             "copies_one_tunnel": False,
+            "device_classes": list(DEVICE_CLASSES),
+            "persist_across_devices": True,
         }
 
     def _append(self, path: Path, row: dict[str, Any]) -> dict[str, Any]:
@@ -153,16 +163,50 @@ class ColdCopy:
         """MESH-VAULT on transfer — a named cold replica, not live sync."""
         tip = self._require_object(digest)
         host_name = self._named_host(host)
-        rec = self._place(tip, host_name, kind="mesh-vault")
+        kind = "device-vault" if host_name in DEVICE_CLASSES else "mesh-vault"
+        rec = self._place(tip, host_name, kind=kind)
         return {
             "ok": True,
             "tip": tip,
             "host": host_name,
-            "kind": "mesh-vault",
+            "kind": kind,
             "live_sync": False,
+            "erased": False,
             "spec": COLD_SPEC,
             "author": AUTHOR,
             "replica": rec,
+        }
+
+    def persist_across_devices(
+        self,
+        digest: str,
+        devices: tuple[str, ...] | list[str] | None = None,
+    ) -> dict[str, Any]:
+        """Cold-copy / vault-on-transfer / outbox class for all devices.
+
+        A pull or offline hop does not erase the tip. Named device
+        classes only (laptop, phone, watches, radio, bluetooth).
+        """
+        tip = self._require_object(digest)
+        wanted = tuple(devices) if devices else DEVICE_CLASSES
+        placed: list[dict[str, Any]] = []
+        for host in wanted:
+            placed.append(self.transfer(tip, host=host))
+        vault = self.transfer(tip, host="mesh-vault")
+        reader = self.transfer(tip, host="reader")
+        return {
+            "ok": True,
+            "tip": tip,
+            "devices": [row["host"] for row in placed],
+            "replicas": self.replica_count(tip),
+            "mesh_vault": vault,
+            "reader": reader,
+            "erased": False,
+            "live_sync": False,
+            "pull_erases_tip": False,
+            "offline_hop_erases_tip": False,
+            "spec": COLD_SPEC,
+            "author": AUTHOR,
         }
 
     def pin_public(self, digest: str, *, kind: str = "tip") -> dict[str, Any]:
@@ -269,6 +313,7 @@ class ColdCopy:
             "replicas": n,
             "required": self.replica_n,
             "single_server_unkillable": n >= 2,
+            "public_pull_unkillable": True,
             "spec": COLD_SPEC,
             "author": AUTHOR,
         }

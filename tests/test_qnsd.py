@@ -46,11 +46,11 @@ def _live(node: Node) -> Node:
     return node
 
 
-def test_01_all_eight_vias_import_protocol() -> None:
-    from qnsd.vias import bt, lan, light, local, operator, plc, qns, rf
+def test_01_all_nine_vias_import_protocol() -> None:
+    from qnsd.vias import bt, lan, light, local, operator, plc, qns, rf, wifi
 
-    mods = (lan, plc, bt, rf, light, qns, operator, local)
-    assert VIA_ORDER == ("lan", "plc", "bt", "rf", "light", "qns", "operator", "local")
+    mods = (lan, wifi, plc, bt, rf, light, qns, operator, local)
+    assert VIA_ORDER == ("lan", "wifi", "plc", "bt", "rf", "light", "qns", "operator", "local")
     for name, mod in zip(VIA_ORDER, mods, strict=True):
         adapter = mod.ADAPTER
         assert adapter.name == name
@@ -58,9 +58,9 @@ def test_01_all_eight_vias_import_protocol() -> None:
         assert callable(adapter.presence)
         assert callable(adapter.admit)
         assert callable(adapter.emit)
-        if name in ("bt", "rf", "light"):
+        if name in ("bt", "rf", "wifi", "light"):
             assert adapter.mock is True
-            assert adapter.device_hook == "mock"
+            assert adapter.device_hook == "HOOK-PENDING"
         else:
             assert adapter.mock is False
 

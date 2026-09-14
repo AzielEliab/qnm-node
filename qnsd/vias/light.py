@@ -22,13 +22,16 @@ from qnsd.vias.base import (
 class LightAdapter(BaseAdapter):
     name = "light"
     mock = True
-    device_hook = "mock"
+    device_hook = "HOOK-PENDING"
+    protocol = "REAL"
 
     def __init__(self) -> None:
         self.camera = Camera()
         self.emitter = Emitter()
 
     def presence(self, ctx: ViaContext) -> str:
+        if ctx.fabric_armed:
+            return PRESENT
         rec = ctx.declared_via("light")
         if rec or ctx.hooks.get("light_declared"):
             return PRESENT
@@ -94,12 +97,18 @@ class LightAdapter(BaseAdapter):
             )
         bits = encode(photon)
         self.emitter.flash(bits)
+        live = bool(ctx.has_phy_driver("light")) and not getattr(self.emitter, "mock", True)
         return ViaResult(
             ok=True,
             kind=OK,
             via=self.name,
             photon=photon,
-            detail="light emit",
+            detail="light protocol emit; camera/emitter HOOK-PENDING"
+            if not live
+            else "light emit",
+            hook_pending=not live,
+            live_link=live,
+            code="" if live else "QNS-HOOK-PENDING",
         )
 
 

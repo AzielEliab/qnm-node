@@ -41,8 +41,10 @@ Make a tip expensive to erase by multiplying **cold copies** and
 
 This is not a VPN, mixnet, or anonymity overlay. Replica placement is
 an explicit named host (`local`, `mesh-vault`, `reader`, or an operator
-declared name). `*`, hydra, unmarked, VPN, Tor, and conceal hosts
-refuse.
+declared name). Device-class hosts for persist/transfer: `laptop`,
+`phone`, `apple-watch`, `phone-watch`, `radio`, `bluetooth`. A pull
+or offline hop does not erase those copies. `*`, hydra, unmarked,
+VPN, Tor, and conceal hosts refuse.
 
 ## Close tests
 

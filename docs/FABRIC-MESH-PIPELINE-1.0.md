@@ -11,6 +11,15 @@ Public identity is **Aziel Eliab** only.
 This paper locks the **local fabric mesh pipeline**. It does not invent
 a live RF mesh, a public hostname restore, or a call into AZ Generator.
 
+**Operator override (ALL-CHANNELS-ON).** When the node is
+**fabric-enabled**, communication channels are **armed ON**: RF,
+Bluetooth, Wi-Fi, photon flashes (QNS1 light), plus lan / plc /
+operator / local. Architecture is armed. A PHY without a real driver
+stays a protocol-complete adapter stamped **HOOK-PENDING** — never an
+invented live-link success. Photon / QNS1 stays REAL where already
+real. `GET /v1/mesh` on public Workers still never enables suite
+radios. This is **local qnm-node fabric**.
+
 ## Sentence
 
 Ingress is scanned, then refused or admitted. Tip clock, dwell clock,
@@ -21,13 +30,15 @@ phoenix-WAIT.
 
 ## What this is
 
-A **127.0.0.1** process path. Radios stay **OFF** by default. Enabling
-the radio bearer still refuses (`QNM-RADIO-OFF`). `GET /v1/mesh` never
-enables. There is **no Node Gate in qnm-node**. This is **not** a
-Softwares-tab product.
+A **127.0.0.1** process path. Unarmed, radios stay **OFF**
+(`QNM-RADIO-OFF` until fabric enable). **Fabric enable arms** RF / BT /
+Wi-Fi / photon. `GET /v1/mesh` never enables. There is **no Node Gate
+in qnm-node**. This is **not** a Softwares-tab product.
 
 Photon is the packet (`QNS1` ver 1.3). Light is camera-flash OCC of
-that same photon — not a second network.
+that same photon — not a second network. An internal **bitmesh**
+plane may bind a geohash to a tip for routing only. Public receipts
+stay **no user / no geo** (not ACT-RECEIPT geo).
 
 ## What this is not
 
@@ -39,9 +50,9 @@ that same photon — not a second network.
 - Not public hostname restore. Phoenix waits / re-seals locally.
   Public tunnels and sites **die with the pull**.
 
-Device hooks for Bluetooth, RF, and camera/emitter may be **mock**.
-The Protocol is real. Invented live hardware is forbidden. Spec
-already allows mock.
+Device hooks for Bluetooth, RF, Wi-Fi, and camera/emitter may be
+**HOOK-PENDING** (honest mock). The Protocol is real. Invented live
+hardware is forbidden. Spec already allows mock.
 
 ## Pipeline (local only)
 
@@ -49,7 +60,7 @@ already allows mock.
 ingress
   → APG (raw bytes first; poison refused, not interpreted)
   → tip / dwell / claim stay strangers
-  → via walker (lan, plc, bt, rf, light, qns, operator, local)
+  → via walker (lan, wifi, plc, bt, rf, light, qns, operator, local)
   → photon translate (same photon_id; translate=true across class)
   → outbox (force_via / path wait; lock-backed)
   → cold-copy / phoenix / reheal / re-expand
@@ -131,17 +142,34 @@ that gate. It does not mean the gate is called and answered “no.”
 ## Vias (walker order)
 
 ```
-VIA_ORDER = lan, plc, bt, rf, light, qns, operator, local
+VIA_ORDER = lan, wifi, plc, bt, rf, light, qns, operator, local
 ```
+
+Fabric enable arms **all** of these. Unarmed rf / plc / light / wifi
+still need declare.
 
 | Class | Presence | Device |
 | --- | --- | --- |
 | `local`, `qns`, `operator` | always PRESENT (software) | REAL software |
 | `lan` | PRESENT (software). Emit fails without a declared link. | REAL software |
-| `plc` | ABSENT without declared `domain` | software declare; no invented PLC PHY |
-| `bt` | PRESENT (software Protocol) | **MOCK** device hook |
-| `rf` | ABSENT without declared `profile` | **MOCK** device hook |
-| `light` | ABSENT without declare. Camera deny is PERM (walk next). | **MOCK** camera / emitter |
+| `plc` | ABSENT without declared `domain` unless fabric-armed | software declare; no invented PLC PHY |
+| `wifi` | ABSENT without declare unless fabric-armed | **HOOK-PENDING** until PHY binds |
+| `bt` | PRESENT (software Protocol) | **HOOK-PENDING** until PHY binds |
+| `rf` | ABSENT without declared `profile` unless fabric-armed | **HOOK-PENDING** until PHY binds |
+| `light` | ABSENT without declare unless fabric-armed. Camera deny is PERM (walk next). | QNS1 codec **REAL**; camera / emitter **HOOK-PENDING** |
+
+**Persist / transfer.** Cold-copy / vault-on-transfer / outbox places
+the tip on named device classes: laptop, phone, apple-watch,
+phone-watch, radio, bluetooth. A pull or offline hop does **not**
+erase the tip.
+
+**Bitmesh geo (internal).** Geohash binds to tip on the internal
+bitmesh plane for routing only. Public receipts stay no user / geo.
+
+**Pissed-off-gov unkillability.** Target **80+** when fabric is
+armed. Score is copy-cost + law + armed channels. REAL vs MOCK is
+labeled. PHY hooks stay HOOK-PENDING. This is not a live RF mesh
+claim. `GET /local/unkillability`.
 
 Restriction walks the next class inside the same call. `force_via`
 restricted ⇒ wait. No silent remap. Packet id does not change.
@@ -168,7 +196,7 @@ APG poison ⇒ **no walk**.
 | Control | Refuse |
 | --- | --- |
 | Bind | 127.0.0.1 / `::1` only (`QNM-LOOPBACK-ONLY`) |
-| Radio bearer | stays off (`QNM-RADIO-OFF`) |
+| Radio bearer | off until fabric enable (`QNM-RADIO-OFF`); then **armed** (HOOK-PENDING, not live mesh) |
 | Remote bearer | cannot enable (`QNM-BEARER-OFF`) |
 | APG size | ingress > 64 KiB (`QNM-APG-POISON`) |
 | APG markers | Lumen / Mandible / lattice_online / mesh_complete / hunt / publish |
