@@ -2,6 +2,10 @@
 
 Every send class implements this Protocol. Sticky-via is banned: the
 walker never remembers a last-success class as the next default.
+
+Soft radio / RF / Bluetooth / Wi-Fi / photon / bitmesh channels that
+are not fielded hardware stay **MOCK**. Channels-ON means the software
+path allows those bearers. It does not mean physical radios are fielded.
 """
 
 from __future__ import annotations
@@ -14,6 +18,9 @@ ALWAYS_PRESENT = ("local", "qns", "operator")
 DECLARE_REQUIRED = ("rf", "plc", "light", "wifi")
 PHYSICAL_HOOK = ("bt", "rf", "wifi", "light")
 CHANNELS_ON = ("rf", "bt", "wifi", "light", "lan", "plc", "qns", "operator", "local")
+SOFT_RADIO_CHANNELS = PHYSICAL_HOOK + ("bitmesh",)
+CHANNELS_ON_MEANS = "software path allowed; not fielded PHY"
+MOCK = "MOCK"
 
 PRESENT = "PRESENT"
 ABSENT = "ABSENT"
@@ -23,6 +30,37 @@ WAIT = "WAIT"
 OK = "OK"
 PROBE = "PROBE"
 HOOK_PENDING = "HOOK-PENDING"
+
+
+def physical_via_stamps() -> dict[str, str]:
+    """Honest public stamp: every unfielded PHY hook is MOCK."""
+    return {name: MOCK for name in PHYSICAL_HOOK}
+
+
+def radios_stamp(enabled: bool) -> str:
+    """Channels-ON software path. Never 'live' or fielded radios."""
+    return "software-on" if enabled else "off"
+
+
+def channel_honesty(*, enabled: bool) -> dict[str, Any]:
+    """Public honesty block. Architecture path ≠ fielded radios."""
+    return {
+        "channels_on": list(CHANNELS_ON) if enabled else [],
+        "all_channels_on": bool(enabled),
+        "channels_on_means": CHANNELS_ON_MEANS,
+        "radios": radios_stamp(enabled),
+        "radios_fielded": False,
+        "radios_status": MOCK,
+        "physical_vias": physical_via_stamps(),
+        "photon": "REAL",
+        "photon_channel": MOCK,
+        "bitmesh_channel": MOCK,
+        "fielded_phy": False,
+        "live_rf_mesh": False,
+        "live_bt_link": False,
+        "live_wifi_link": False,
+        "live_flash": False,
+    }
 
 
 @dataclass
@@ -56,6 +94,8 @@ class ViaResult:
     absent: bool = False
     hook_pending: bool = False
     live_link: bool = False
+    fielded: bool = False
+    status: str = MOCK
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -70,6 +110,8 @@ class ViaResult:
             "absent": self.absent,
             "hook_pending": self.hook_pending,
             "live_link": self.live_link,
+            "fielded": self.fielded,
+            "status": self.status,
         }
 
 
@@ -117,11 +159,13 @@ class BaseAdapter:
             via=self.name,
             hook_pending=True,
             live_link=False,
+            fielded=False,
+            status=MOCK,
             code="QNS-HOOK-PENDING",
             detail=detail
             or (
-                f"{self.name} armed; device hook pending; "
-                "no invented live link"
+                f"{self.name} MOCK; software path only; "
+                "no fielded PHY; no invented live link"
             ),
             photon=photon,
         )

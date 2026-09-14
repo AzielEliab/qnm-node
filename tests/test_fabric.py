@@ -36,6 +36,10 @@ def test_pipeline_doc_and_status_tell_the_truth() -> None:
     assert "MirageGrid" in text
     assert "external stranger" in text.lower() or "external stranger" in text
     assert "live RF mesh" not in text.lower() or "not invent a live RF mesh" in text
+    assert "**MOCK**" in text
+    assert "software path" in text.lower()
+    assert "operator offline-verify" in text.lower()
+    assert "not fielded" in text.lower()
     fabric = Fabric()
     snap = fabric.status()
     assert snap["spec"] == FABRIC_SPEC
@@ -44,11 +48,15 @@ def test_pipeline_doc_and_status_tell_the_truth() -> None:
     assert snap["live_rf_mesh"] is False
     assert snap["public_hostname_restore"] is False
     assert snap["physical_vias"] == {
-        "bt": "mock",
-        "rf": "mock",
-        "wifi": "mock",
-        "light": "mock",
+        "bt": "MOCK",
+        "rf": "MOCK",
+        "wifi": "MOCK",
+        "light": "MOCK",
     }
+    assert snap["radios_status"] == "MOCK"
+    assert snap["radios_fielded"] is False
+    assert snap["photon_channel"] == "MOCK"
+    assert snap["bitmesh_channel"] == "MOCK"
     assert snap["via_order"] == list(VIA_ORDER)
     assert snap["miragegrid"]["called_from_qnm"] is False
     assert snap["miragegrid"]["back_gate"] is False
@@ -189,10 +197,10 @@ def test_walker_translate_declare_required_and_mocks(tmp_path: Path) -> None:
     assert qnsd.stack.adapters["light"].presence(qnsd.ctx()) == ABSENT
     from qnsd.vias import bt, light, rf, wifi
 
-    assert bt.ADAPTER.device_hook == "HOOK-PENDING"
-    assert rf.ADAPTER.device_hook == "HOOK-PENDING"
-    assert wifi.ADAPTER.device_hook == "HOOK-PENDING"
-    assert light.ADAPTER.device_hook == "HOOK-PENDING"
+    assert bt.ADAPTER.device_hook == "MOCK"
+    assert rf.ADAPTER.device_hook == "MOCK"
+    assert wifi.ADAPTER.device_hook == "MOCK"
+    assert light.ADAPTER.device_hook == "MOCK"
     assert light.ADAPTER.protocol == "REAL"
     assert qnsd.stack.adapters["local"].mock is False
 

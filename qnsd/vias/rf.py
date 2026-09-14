@@ -1,17 +1,17 @@
 """RF via — ABSENT without a declared profile unless fabric-armed.
 
-Device hook is HOOK-PENDING until a PHY binds. No invented live RF mesh.
+Device hook is MOCK until a fielded PHY binds. No invented live RF mesh.
 """
 
 from __future__ import annotations
 
-from qnsd.vias.base import ABSENT, PRESENT, BaseAdapter, ViaContext
+from qnsd.vias.base import ABSENT, MOCK, PRESENT, BaseAdapter, ViaContext
 
 
 class RfAdapter(BaseAdapter):
     name = "rf"
     mock = True
-    device_hook = "HOOK-PENDING"
+    device_hook = MOCK
     protocol = "ViaAdapter"
 
     def presence(self, ctx: ViaContext) -> str:

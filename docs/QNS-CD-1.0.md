@@ -40,8 +40,9 @@ Anon-broadcast stays a loopback sibling — never a publish path.
 - Not enabled by `GET /v1/mesh`. Not a Node Gate / IP panel.
 - Not a VPN, radio mesh claim, qubit machine, or Bell-pair physics.
 - Not Lumen / Mandible / `lattice_online` / `mesh_complete`.
-- Device hooks for Bluetooth, RF, and camera may be **mock** and still
-  implement the Protocol. Mock is honest. Invented hardware is not.
+- Device hooks for Bluetooth, RF, Wi-Fi, photon-flash, and camera are
+  **MOCK** and still implement the Protocol. Mock is honest. Invented
+  hardware is not. Channels-ON is a software path, not fielded radios.
 
 ## §4 Tree
 
@@ -123,11 +124,11 @@ Every module implements `ViaAdapter` (Protocol): `presence`, `admit`,
 | `rf` | ABSENT without declared `profile` unless fabric-armed |
 | `light` | ABSENT without declare unless fabric-armed. Camera deny is PERM (walk next). |
 
-Device hooks (`bt`, `rf`, `wifi`, camera, emitter) may be
-**HOOK-PENDING**. The Protocol is real. Photon / QNS1 light codec is
+Device hooks (`bt`, `rf`, `wifi`, camera, emitter, photon channel)
+are **MOCK**. The Protocol is real. Photon / QNS1 light **codec** is
 **REAL**. Invented live-link success is forbidden. Sticky-via is
 banned — the last success is never the next default. Fabric enable
-arms RF / BT / Wi-Fi / photon.
+allows the RF / BT / Wi-Fi / photon software path (not fielded radios).
 
 **Restriction.** COLD → local only. `always_try` walks `VIA_ORDER`; a
 fail / absent / PERM advances to the next class **inside the same

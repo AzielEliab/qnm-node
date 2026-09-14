@@ -60,7 +60,7 @@ def test_01_all_nine_vias_import_protocol() -> None:
         assert callable(adapter.emit)
         if name in ("bt", "rf", "wifi", "light"):
             assert adapter.mock is True
-            assert adapter.device_hook == "HOOK-PENDING"
+            assert adapter.device_hook == "MOCK"
         else:
             assert adapter.mock is False
 

@@ -8,8 +8,14 @@
   "bind": "127.0.0.1",
   "port": 8891,
   "radios": "off",
+  "radios_fielded": false,
+  "radios_status": "MOCK",
   "all_channels_on_when_fabric": true,
+  "channels_on_means": "software path allowed; not fielded PHY",
+  "physical_vias": "MOCK",
   "bitmesh_geo": "internal-only",
+  "bitmesh_channel": "MOCK",
+  "no_fan": true,
   "public_receipt_geo": false,
   "auto_heal": false,
   "live_from_site_ping": false,
@@ -80,6 +86,8 @@
     "plane_a": "live-same-cf-tunnel",
     "plane_b_doi": null,
     "plane_c_files": 30,
-    "plane_c_offline_verify": false
+    "plane_c_offline_verify": false,
+    "plane_c_attest_required": true,
+    "plane_c_before_live": "operator offline-verify/attest required"
   }
 }

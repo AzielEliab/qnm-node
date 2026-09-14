@@ -1,8 +1,9 @@
 """Internal bitmesh geo plane — FABRIC-MESH-PIPELINE-1.0.
 
 Geohash (or equivalent) binds to a tip for **internal bitmesh routing
-only**. This is not public ACT-RECEIPT geo. Public receipts stay no
-user / no geo / no IP.
+only**. This is not public ACT-RECEIPT geo and not a fielded radio.
+The bitmesh channel is **MOCK** until real PHY exists. Public receipts
+stay no user / no geo / no IP.
 
 Author: Aziel Eliab only.
 """
@@ -121,6 +122,8 @@ class Bitmesh:
             "build": SPEC,
             "author": AUTHOR,
             "plane": BITMESH_PLANE,
+            "channel": "MOCK",
+            "fielded": False,
             "public": False,
             "public_receipt_geo": False,
             "binds": len(self.list()),

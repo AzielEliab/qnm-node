@@ -9,6 +9,7 @@ from qnsd.light.codec import decode, encode
 from qnsd.light.emitter import Emitter
 from qnsd.vias.base import (
     ABSENT,
+    MOCK,
     OK,
     PERM,
     PRESENT,
@@ -22,7 +23,7 @@ from qnsd.vias.base import (
 class LightAdapter(BaseAdapter):
     name = "light"
     mock = True
-    device_hook = "HOOK-PENDING"
+    device_hook = MOCK
     protocol = "REAL"
 
     def __init__(self) -> None:
@@ -103,11 +104,13 @@ class LightAdapter(BaseAdapter):
             kind=OK,
             via=self.name,
             photon=photon,
-            detail="light protocol emit; camera/emitter HOOK-PENDING"
+            detail="light protocol emit; camera/emitter MOCK"
             if not live
             else "light emit",
             hook_pending=not live,
             live_link=live,
+            fielded=False,
+            status=MOCK if not live else "REAL",
             code="" if live else "QNS-HOOK-PENDING",
         )
 

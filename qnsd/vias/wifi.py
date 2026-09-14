@@ -1,17 +1,18 @@
-"""Wi-Fi via — fabric-armed ON. Device hook is HOOK-PENDING until a PHY binds.
+"""Wi-Fi via — software path may be ON. Device hook is MOCK until a PHY binds.
 
-Protocol-complete ViaAdapter. No invented 802.11 success.
+Protocol-complete ViaAdapter. No invented 802.11 success. Channels-ON
+is not a fielded radio.
 """
 
 from __future__ import annotations
 
-from qnsd.vias.base import ABSENT, PRESENT, BaseAdapter, ViaContext
+from qnsd.vias.base import ABSENT, MOCK, PRESENT, BaseAdapter, ViaContext
 
 
 class WifiAdapter(BaseAdapter):
     name = "wifi"
     mock = True
-    device_hook = "HOOK-PENDING"
+    device_hook = MOCK
     protocol = "ViaAdapter"
 
     def presence(self, ctx: ViaContext) -> str:

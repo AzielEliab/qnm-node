@@ -3,8 +3,9 @@
 local = on. Remote stays off. LIVE requires an explicit operator bearer.
 Site ping is not a bearer.
 
-When fabric is enabled, RF / BT / Wi-Fi / lan arm ON. That is armed
-posture, not a live-packet claim. Radio enable without fabric still
+When fabric is enabled, RF / BT / Wi-Fi / lan software paths are
+allowed (Channels-ON). That is not fielded radios and not a live-packet
+claim. Soft radio bearers stay MOCK. Radio enable without fabric still
 refuses (`QNM-RADIO-OFF`). GET /v1/mesh never enables these bearers.
 """
 
@@ -34,13 +35,16 @@ class Bearers:
         return bool(self._on.get(name, False))
 
     def arm_fabric(self) -> dict[str, Any]:
-        """Arm RF / BT / Wi-Fi / lan. Not a live PHY claim."""
+        """Allow RF / BT / Wi-Fi / lan software paths. Not a fielded PHY."""
         self.fabric_armed = True
         for name in FABRIC_ARM:
             self._on[name] = True
         return {
             "ok": True,
             "armed": True,
+            "channels_on_means": "software path allowed; not fielded PHY",
+            "radios_status": "MOCK",
+            "radios_fielded": False,
             "bearers": self.snapshot(),
             "live_rf_mesh": False,
             "spec": SPEC,
@@ -67,6 +71,8 @@ class Bearers:
             "on": self._on[name],
             "armed": self.fabric_armed and name in FABRIC_ARM and on,
             "live_link": False,
+            "radios_fielded": False,
+            "radios_status": "MOCK",
             "bearers": self.snapshot(),
             "spec": SPEC,
             "author": AUTHOR,

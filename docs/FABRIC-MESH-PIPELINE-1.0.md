@@ -12,13 +12,15 @@ This paper locks the **local fabric mesh pipeline**. It does not invent
 a live RF mesh, a public hostname restore, or a call into AZ Generator.
 
 **Operator override (ALL-CHANNELS-ON).** When the node is
-**fabric-enabled**, communication channels are **armed ON**: RF,
-Bluetooth, Wi-Fi, photon flashes (QNS1 light), plus lan / plc /
-operator / local. Architecture is armed. A PHY without a real driver
-stays a protocol-complete adapter stamped **HOOK-PENDING** — never an
-invented live-link success. Photon / QNS1 stays REAL where already
-real. `GET /v1/mesh` on public Workers still never enables suite
-radios. This is **local qnm-node fabric**.
+**fabric-enabled**, the **software path** allows RF, Bluetooth,
+Wi-Fi, photon flashes (QNS1 light), plus lan / plc / operator /
+local. Channels-ON is not fielded radios. A PHY without fielded
+hardware stays a protocol-complete adapter stamped **MOCK** — never
+an invented live-link success. Photon / QNS1 **codec** stays REAL
+where already real; the photon **channel** is MOCK. Bitmesh is an
+internal software plane, also MOCK as a radio. `GET /v1/mesh` on
+public Workers still never enables suite radios. This is **local
+qnm-node fabric**.
 
 ## Sentence
 
@@ -31,8 +33,9 @@ phoenix-WAIT.
 ## What this is
 
 A **127.0.0.1** process path. Unarmed, radios stay **OFF**
-(`QNM-RADIO-OFF` until fabric enable). **Fabric enable arms** RF / BT /
-Wi-Fi / photon. `GET /v1/mesh` never enables. There is **no Node Gate
+(`QNM-RADIO-OFF` until fabric enable). **Fabric enable** allows the
+RF / BT / Wi-Fi / photon software path. Soft radios stay **MOCK**.
+`GET /v1/mesh` never enables. There is **no Node Gate
 in qnm-node**. This is **not** a Softwares-tab product.
 
 Photon is the packet (`QNS1` ver 1.3). Light is camera-flash OCC of
@@ -50,8 +53,8 @@ stay **no user / no geo** (not ACT-RECEIPT geo).
 - Not public hostname restore. Phoenix waits / re-seals locally.
   Public tunnels and sites **die with the pull**.
 
-Device hooks for Bluetooth, RF, Wi-Fi, and camera/emitter may be
-**HOOK-PENDING** (honest mock). The Protocol is real. Invented live
+Device hooks for Bluetooth, RF, Wi-Fi, photon-flash, camera/emitter,
+and bitmesh are **MOCK**. The Protocol is real. Invented live
 hardware is forbidden. Spec already allows mock.
 
 ## Pipeline (local only)
@@ -145,18 +148,19 @@ that gate. It does not mean the gate is called and answered “no.”
 VIA_ORDER = lan, wifi, plc, bt, rf, light, qns, operator, local
 ```
 
-Fabric enable arms **all** of these. Unarmed rf / plc / light / wifi
-still need declare.
+Fabric enable allows the software path for **all** of these. That is
+not fielded radios. Unarmed rf / plc / light / wifi still need
+declare.
 
 | Class | Presence | Device |
 | --- | --- | --- |
 | `local`, `qns`, `operator` | always PRESENT (software) | REAL software |
 | `lan` | PRESENT (software). Emit fails without a declared link. | REAL software |
 | `plc` | ABSENT without declared `domain` unless fabric-armed | software declare; no invented PLC PHY |
-| `wifi` | ABSENT without declare unless fabric-armed | **HOOK-PENDING** until PHY binds |
-| `bt` | PRESENT (software Protocol) | **HOOK-PENDING** until PHY binds |
-| `rf` | ABSENT without declared `profile` unless fabric-armed | **HOOK-PENDING** until PHY binds |
-| `light` | ABSENT without declare unless fabric-armed. Camera deny is PERM (walk next). | QNS1 codec **REAL**; camera / emitter **HOOK-PENDING** |
+| `wifi` | ABSENT without declare unless fabric-armed | **MOCK** until fielded PHY |
+| `bt` | PRESENT (software Protocol) | **MOCK** until fielded PHY |
+| `rf` | ABSENT without declared `profile` unless fabric-armed | **MOCK** until fielded PHY |
+| `light` | ABSENT without declare unless fabric-armed. Camera deny is PERM (walk next). | QNS1 codec **REAL**; camera / emitter / photon channel **MOCK** |
 
 **Persist / transfer.** Cold-copy / vault-on-transfer / outbox places
 the tip on named device classes: laptop, phone, apple-watch,
@@ -164,20 +168,22 @@ phone-watch, radio, bluetooth. A pull or offline hop does **not**
 erase the tip.
 
 **Bitmesh geo (internal).** Geohash binds to tip on the internal
-bitmesh plane for routing only. Public receipts stay no user / geo.
+bitmesh plane for routing only. The bitmesh **channel** is **MOCK**
+(not fielded RF). Public receipts stay no user / geo.
 
 **Pissed-off-gov unkillability.** Architecture ≠ fielded.
-`architecture_score` may be high (law + armed channels + persist).
+`architecture_score` may be high (law + software Channels-ON + persist).
 `fielded_score` / `score` is the hub-safe number. Fielded band today
-is **68–70** (Cap-7 live + armed HOOK-PENDING) until Plane B has a
-real Zenodo DOI **and** Plane C has an offline-verify receipt.
-`meets_target` is true only when those fielded gates pass. Hubs must
-**not** publish `architecture_score` or 100. Plane A hubs are LIVE on
-the **same CF tunnel** — not four independent copies. Plane B DOI is
-null (SLOT) until seated. Plane C USB pack is READY, not verified, until
-an offline receipt. Do not invent a DOI or airgap success.
-`GET /local/unkillability`. PHY hooks stay HOOK-PENDING. This is not
-a live RF mesh claim.
+is **68–70** (Cap-7 live + MOCK soft radios) until Plane B has a
+real Zenodo DOI **and** Plane C has an operator offline-verify /
+attest receipt. `meets_target` is true only when those fielded gates
+pass. Hubs must **not** publish `architecture_score` or 100. Plane A
+hubs are LIVE on the **same CF tunnel** — not four independent copies.
+Plane B DOI is null (SLOT) until seated. Plane C USB airgap is READY,
+not LIVE, until the operator offline-verifies / attests. No FAN. Do
+not invent a DOI or airgap success. `GET /local/unkillability`. Soft
+RF / BT / Wi-Fi / photon / bitmesh stay **MOCK**. This is not a live
+RF mesh claim.
 
 Restriction walks the next class inside the same call. `force_via`
 restricted ⇒ wait. No silent remap. Packet id does not change.
@@ -204,7 +210,7 @@ APG poison ⇒ **no walk**.
 | Control | Refuse |
 | --- | --- |
 | Bind | 127.0.0.1 / `::1` only (`QNM-LOOPBACK-ONLY`) |
-| Radio bearer | off until fabric enable (`QNM-RADIO-OFF`); then **armed** (HOOK-PENDING, not live mesh) |
+| Radio bearer | off until fabric enable (`QNM-RADIO-OFF`); then software-on (**MOCK**, not fielded / not live mesh) |
 | Remote bearer | cannot enable (`QNM-BEARER-OFF`) |
 | APG size | ingress > 64 KiB (`QNM-APG-POISON`) |
 | APG markers | Lumen / Mandible / lattice_online / mesh_complete / hunt / publish |

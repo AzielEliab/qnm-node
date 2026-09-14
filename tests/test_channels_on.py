@@ -19,7 +19,7 @@ from qnsd.boot import QNSRefuse
 from qnsd.node import Node as QnsdNode
 from qnsd.photon import make_photon
 from qnsd.sanitize import sanitize_via_payload
-from qnsd.vias.base import HOOK_PENDING, PRESENT
+from qnsd.vias.base import HOOK_PENDING, MOCK, PRESENT
 
 
 def _boot(root: Path) -> Node:
@@ -37,12 +37,17 @@ def test_fabric_enable_arms_rf_bt_wifi_photon(tmp_path: Path) -> None:
     armed = node.enable_fabric()
     assert armed["spec"] == FABRIC_SPEC
     assert armed["enabled"] is True
-    assert armed["radios"] == "armed"
+    assert armed["radios"] == "software-on"
+    assert armed["radios_status"] == MOCK
+    assert armed["radios_fielded"] is False
+    assert armed["channels_on_means"] == "software path allowed; not fielded PHY"
     assert armed["all_channels_on"] is True
     for name in ("rf", "bt", "wifi", "light"):
         assert name in armed["channels_on"]
-        assert armed["physical_vias"][name] == "HOOK-PENDING"
+        assert armed["physical_vias"][name] == MOCK
     assert armed["photon"] == "REAL"
+    assert armed["photon_channel"] == MOCK
+    assert armed["bitmesh_channel"] == MOCK
     assert armed["live_rf_mesh"] is False
     assert armed["live_bt_link"] is False
     assert armed["live_wifi_link"] is False
@@ -69,7 +74,9 @@ def test_fabric_enable_arms_rf_bt_wifi_photon(tmp_path: Path) -> None:
     assert kill["real_mock"]["photon"] == "REAL"
     assert kill["real_mock"]["live_rf_mesh"] is False
     for name in ("bt", "rf", "wifi", "light"):
-        assert kill["real_mock"]["physical_vias"][name] == "HOOK-PENDING"
+        assert kill["real_mock"]["physical_vias"][name] == MOCK
+    assert kill["real_mock"]["photon_channel"] == MOCK
+    assert kill["real_mock"]["bitmesh_channel"] == MOCK
     assert armed["unkillability"]["architecture_score"] >= TARGET
     assert armed["unkillability"]["meets_target"] is False
 
@@ -119,6 +126,8 @@ def test_bitmesh_geo_is_internal_not_public_receipt(tmp_path: Path) -> None:
     tip = node.chain.tip
     bound = node.bind_bitmesh({"tip": tip, "lat": 51.5074, "lon": -0.1278})
     assert bound["plane"] == "bitmesh-internal"
+    assert node.bitmesh.status()["channel"] == MOCK
+    assert node.bitmesh.status()["fielded"] is False
     assert bound["public"] is False
     assert bound["act_receipt_geo"] is False
     assert bound["geohash"] == geohash(51.5074, -0.1278)
@@ -196,7 +205,7 @@ def test_architecture_high_fielded_gated_without_b_and_c(tmp_path: Path) -> None
     assert kinds["channels_armed"] == "LAW"
     assert kinds["honest_hooks"] == "LAW"
     assert kinds["no_one_tunnel"] == "LAW"
-    assert kill["real_mock"]["physical_vias"]["rf"] == "HOOK-PENDING"
+    assert kill["real_mock"]["physical_vias"]["rf"] == MOCK
     assert kill["real_mock"]["plane_b_doi"] == "SLOT"
     assert kill["real_mock"]["plane_c_offline_verify"] == "READY"
     with pytest.raises(QNMRefuse) as vxc:
@@ -254,11 +263,47 @@ def test_fielded_meets_target_only_with_honest_b_and_c(tmp_path: Path) -> None:
     assert done["score"] == done["fielded_score"]
     assert done["real_mock"]["plane_b_doi"] == "REAL"
     assert done["real_mock"]["plane_c_offline_verify"] == "REAL"
+    assert done["planes"]["plane_c"]["live"] is False
+    assert done["planes"]["plane_c"]["fan"] is False
+    assert done["planes"]["no_fan"] is True
     assert done["publish_to_hubs"] is False
     assert done["hubs_must_not_publish_100"] is True
     code, planes = node.handle("GET", "/local/planes", b"")
     assert code == 200
     assert planes["gates"]["fielded_ready"] is True
+
+
+def test_soft_radio_stamped_mock_not_fielded_phy(tmp_path: Path) -> None:
+    node = _boot(tmp_path)
+    cold = node.snapshot()
+    assert cold["radios"] == "off"
+    assert cold["radios_status"] == MOCK
+    assert cold["radios_fielded"] is False
+    assert cold["fabric"]["physical_vias"]["rf"] == MOCK
+    assert cold["fabric"]["photon_channel"] == MOCK
+    assert cold["bitmesh"]["channel"] == MOCK
+    armed = node.enable_fabric()
+    assert armed["radios"] == "software-on"
+    assert armed["radios_status"] == MOCK
+    assert armed["radios_fielded"] is False
+    assert armed["fielded_phy"] is False
+    assert armed["channels_on_means"] == "software path allowed; not fielded PHY"
+    for name in ("rf", "bt", "wifi", "light"):
+        assert armed["physical_vias"][name] == MOCK
+    assert node.snapshot()["radios"] == "software-on"
+    assert node.snapshot()["radios_fielded"] is False
+    planes = node.planes.snapshot()
+    assert planes["plane_c"]["attest_required"] is True
+    assert planes["plane_c"]["before_live"] == "operator offline-verify/attest required"
+    assert planes["plane_c"]["live"] is False
+    assert planes["plane_c"]["fan"] is False
+    assert planes["no_fan"] is True
+    with pytest.raises(QNMRefuse) as fxc:
+        node.planes_act({"op": "fan"})
+    assert fxc.value.code == "QNM-NO-FAN-AIRGAP"
+    with pytest.raises(QNMRefuse) as lxc:
+        node.planes_act({"op": "plane_c_live"})
+    assert lxc.value.code == "QNM-NO-FAN-AIRGAP"
 
 
 def test_unarmed_radio_still_refuses_until_fabric(tmp_path: Path) -> None:
