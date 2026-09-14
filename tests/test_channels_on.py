@@ -13,7 +13,7 @@ from qnm.bitmesh import geohash, public_receipt_has_geo, refuse_public_geo
 from qnm.boot import QNMRefuse
 from qnm.coldcopy import DEVICE_CLASSES
 from qnm.fabric import CHANNELS_ON, FABRIC_SPEC
-from qnm.unkillability import TARGET, compute_unkillability
+from qnm.unkillability import FIELDED_BAND, TARGET, compute_unkillability
 from qnm.node import Node
 from qnsd.boot import QNSRefuse
 from qnsd.node import Node as QnsdNode
@@ -60,14 +60,18 @@ def test_fabric_enable_arms_rf_bt_wifi_photon(tmp_path: Path) -> None:
     assert status["enabled"] is True
     assert status["call_az_generator"] is False
     kill = node.unkillability()
-    assert kill["score"] >= TARGET
-    assert kill["meets_target"] is True
+    assert kill["architecture_score"] >= TARGET
+    assert kill["architecture_only"] is True
+    assert kill["meets_target"] is False
+    assert kill["fielded_score"] <= FIELDED_BAND[1]
+    assert kill["score"] == kill["fielded_score"]
     assert kill["label"] == "pissed-off-gov"
     assert kill["real_mock"]["photon"] == "REAL"
     assert kill["real_mock"]["live_rf_mesh"] is False
     for name in ("bt", "rf", "wifi", "light"):
         assert kill["real_mock"]["physical_vias"][name] == "HOOK-PENDING"
-    assert armed["unkillability"]["score"] >= TARGET
+    assert armed["unkillability"]["architecture_score"] >= TARGET
+    assert armed["unkillability"]["meets_target"] is False
 
 
 def test_phy_emit_is_hook_pending_not_live_success(tmp_path: Path) -> None:
@@ -165,22 +169,36 @@ def test_mesh_get_never_enables_and_no_az_generator(tmp_path: Path) -> None:
     ).read_text(encoding="utf-8")
 
 
-def test_pissed_off_gov_unkillability_reaches_80(tmp_path: Path) -> None:
+def test_architecture_high_fielded_gated_without_b_and_c(tmp_path: Path) -> None:
     node = _boot(tmp_path)
     cold = node.unkillability()
     assert cold["views_read"] is False
     assert cold["az_generator"] is False
     assert cold["live_rf_mesh"] is False
     assert cold["real_mock"]["live_rf_mesh"] is False
+    assert cold["planes"]["plane_b"]["doi"] is None
+    assert cold["planes"]["plane_c"]["offline_verify"] is False
+    assert cold["planes"]["plane_c"]["status"] == "READY"
+    assert cold["planes"]["plane_a"]["independent"] is False
     armed = node.enable_fabric()
     kill = armed["unkillability"]
-    assert kill["score"] >= 80
-    assert kill["score"] >= TARGET
+    assert kill["architecture_score"] >= 80
+    assert kill["architecture_score"] <= 100
+    assert kill["fielded_score"] == 70
+    assert kill["score"] == 70
+    assert kill["fielded_band"] == [68, 70]
+    assert kill["meets_target"] is False
+    assert kill["architecture_only"] is True
+    assert kill["publish_to_hubs"] is False
+    assert kill["hubs_must_not_publish_100"] is True
     kinds = {row["name"]: row["kind"] for row in kill["factors"]}
     assert kinds["photon_real"] == "REAL"
     assert kinds["channels_armed"] == "LAW"
     assert kinds["honest_hooks"] == "LAW"
+    assert kinds["no_one_tunnel"] == "LAW"
     assert kill["real_mock"]["physical_vias"]["rf"] == "HOOK-PENDING"
+    assert kill["real_mock"]["plane_b_doi"] == "SLOT"
+    assert kill["real_mock"]["plane_c_offline_verify"] == "READY"
     with pytest.raises(QNMRefuse) as vxc:
         node.unkillability({"views": 99})
     assert vxc.value.code == "QNM-SCORE-NO-VIEWS"
@@ -195,9 +213,52 @@ def test_pissed_off_gov_unkillability_reaches_80(tmp_path: Path) -> None:
     assert pxc.value.code == "QNS-HOOK-PENDING"
     code, api = node.handle("GET", "/local/unkillability", b"")
     assert code == 200
-    assert api["score"] >= 80
+    assert api["score"] == api["fielded_score"]
+    assert api["meets_target"] is False
     assert api["call_az_generator"] is False
-    assert node.snapshot()["unkillability"]["score"] >= 80
+    snap = node.snapshot()["unkillability"]
+    assert snap["score"] == 70
+    assert snap["architecture_score"] >= 80
+    assert snap["meets_target"] is False
+
+
+def test_fielded_meets_target_only_with_honest_b_and_c(tmp_path: Path) -> None:
+    node = _boot(tmp_path)
+    node.enable_fabric()
+    with pytest.raises(QNMRefuse) as dxc:
+        node.planes_act({"op": "doi", "doi": None})
+    assert dxc.value.code == "QNM-NO-FAN-DOI"
+    with pytest.raises(QNMRefuse):
+        node.planes_act({"op": "invent_doi"})
+    with pytest.raises(QNMRefuse) as cxc:
+        node.planes_act({"op": "verify_c", "body": ""})
+    assert cxc.value.code == "QNM-NO-FAN-AIRGAP"
+    with pytest.raises(QNMRefuse):
+        node.planes_act({"op": "fake_verify"})
+    still = node.unkillability()
+    assert still["meets_target"] is False
+    assert still["planes"]["plane_b"]["doi"] is None
+    seated = node.planes_act({"op": "doi", "doi": "10.5281/zenodo.9999999"})
+    assert seated["doi"] == "10.5281/zenodo.9999999"
+    mid = node.unkillability()
+    assert mid["gates"]["plane_b_doi"] is True
+    assert mid["meets_target"] is False
+    verified = node.planes_act({"op": "verify_c", "body": "usb-airgap-pack"})
+    assert verified["offline_verify"] is True
+    assert len(verified["pack_tip"]) == 64
+    done = node.unkillability()
+    assert done["gates"]["fielded_ready"] is True
+    assert done["architecture_only"] is False
+    assert done["meets_target"] is True
+    assert done["fielded_score"] >= TARGET
+    assert done["score"] == done["fielded_score"]
+    assert done["real_mock"]["plane_b_doi"] == "REAL"
+    assert done["real_mock"]["plane_c_offline_verify"] == "REAL"
+    assert done["publish_to_hubs"] is False
+    assert done["hubs_must_not_publish_100"] is True
+    code, planes = node.handle("GET", "/local/planes", b"")
+    assert code == 200
+    assert planes["gates"]["fielded_ready"] is True
 
 
 def test_unarmed_radio_still_refuses_until_fabric(tmp_path: Path) -> None:

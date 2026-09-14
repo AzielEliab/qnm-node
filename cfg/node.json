@@ -75,5 +75,11 @@
   "no_rewrite": true,
   "rewrite_key": false,
   "verify_without_voice": true,
-  "copies_one_tunnel": false
+  "copies_one_tunnel": false,
+  "planes": {
+    "plane_a": "live-same-cf-tunnel",
+    "plane_b_doi": null,
+    "plane_c_files": 30,
+    "plane_c_offline_verify": false
+  }
 }

@@ -1,12 +1,15 @@
 """Pissed-off-gov unkillability — FABRIC-MESH-PIPELINE-1.0.
 
-How expensive it is to erase the chain if a government pulls the
-public origin, seizes one server, jams one medium, or demands a
-rewrite / lie.
+Architecture score (law + armed channels) is not the fielded score.
 
-This is an architecture + copy-cost score. It is **not** a live RF
-mesh claim. PHY without a driver stays HOOK-PENDING (MOCK). Photon
-codec stays REAL. Score never reads views.
+Fielded band today is Cap-7 live + armed HOOK-PENDING hooks (~68–70)
+until Plane B has a real Zenodo DOI and Plane C has an offline-verify
+receipt. Architecture alone must not claim the fielded target or 100.
+
+Hubs must not publish architecture_score / 100.
+
+This is **not** a live RF mesh claim. PHY without a driver stays
+HOOK-PENDING (MOCK). Photon codec stays REAL. Score never reads views.
 
 Author: Aziel Eliab only.
 """
@@ -17,18 +20,24 @@ from typing import Any
 
 from qnm.boot import AUTHOR, SPEC, QNMRefuse
 from qnm.coldcopy import DEVICE_CLASSES
+from qnm.planes import valid_zenodo_doi
 from qnsd.vias import CHANNELS_ON, PHYSICAL_HOOK
 
-UNKILL_SPEC = "UNKILLABILITY-1.0"
+UNKILL_SPEC = "UNKILLABILITY-1.1"
 TARGET = 80
 MAX_SCORE = 100
+FIELDED_BAND = (68, 70)
+FIELDED_UNARMED = 68
+FIELDED_ARMED = 70
+PLANE_B_POINTS = 8
+PLANE_C_POINTS = 8
 
 # Law that is true of this process even before fabric enable.
 _LAW_POINTS = (
     ("die_with_pull", 10, "REAL", "public origin/Worker/DNS pull does not erase copies"),
     ("no_live_sync", 6, "REAL", "refuse live body sync"),
     ("no_rewrite", 6, "REAL", "no rewrite key; published tip immutable"),
-    ("no_one_tunnel", 6, "REAL", "copies are not all on one tunnel"),
+    ("no_one_tunnel", 6, "LAW", "law forbids one-tunnel copies; Plane A is same-CF-tunnel today"),
     ("offline_survive", 8, "REAL", "verify/append without the public network"),
     ("archive_reexpand", 6, "REAL", "bytes of the chain, not summaries"),
     ("self_reheal", 6, "REAL", "own last good tip or phoenix-WAIT"),
@@ -42,6 +51,7 @@ _FABRIC_POINTS = (
     ("channels_armed", 12, "LAW", "RF/BT/Wi-Fi/photon armed ON (PHY may be MOCK)"),
     ("photon_real", 6, "REAL", "QNS1 codec is real"),
 )
+
 
 def _factor(name: str, points: int, kind: str, detail: str, *, on: bool) -> dict[str, Any]:
     return {
@@ -63,8 +73,11 @@ def compute_unkillability(
     live_rf_mesh: bool = False,
     live_phy: bool = False,
     views: Any = None,
+    plane_b_doi: str | None = None,
+    plane_c_offline_verify: bool = False,
+    planes: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Score 0–100. Target 80+ when fabric is armed. Never a live-PHY claim."""
+    """Architecture and fielded scores. Target 80+ is fielded-only."""
     if views is not None:
         raise QNMRefuse("QNM-SCORE-NO-VIEWS", "unkillability never reads views")
     if live_rf_mesh or live_phy:
@@ -107,18 +120,47 @@ def compute_unkillability(
         )
     )
 
-    value = min(MAX_SCORE, sum(int(row["points"]) for row in factors))
+    architecture = min(MAX_SCORE, sum(int(row["points"]) for row in factors))
+    doi_ok = valid_zenodo_doi(plane_b_doi)
+    c_ok = bool(plane_c_offline_verify)
+    fielded = FIELDED_ARMED if fabric_enabled else FIELDED_UNARMED
+    if doi_ok:
+        fielded += PLANE_B_POINTS
+    if c_ok:
+        fielded += PLANE_C_POINTS
+    fielded = min(MAX_SCORE, fielded)
+    gates = bool(doi_ok and c_ok)
+    meets = bool(gates and fielded >= TARGET)
     phy = {name: "HOOK-PENDING" if fabric_enabled else "mock" for name in PHYSICAL_HOOK}
+    band = list(FIELDED_BAND) if not gates else [fielded, fielded]
     return {
         "ok": True,
-        "score": value,
+        "score": fielded,
+        "architecture_score": architecture,
+        "architecture_only": not gates,
+        "fielded_score": fielded,
+        "fielded_band": band,
+        "fielded_band_default": list(FIELDED_BAND),
         "target": TARGET,
-        "meets_target": value >= TARGET,
+        "meets_target": meets,
+        "publish_to_hubs": False,
+        "hubs_must_not_publish_100": True,
+        "hubs_must_not_publish_architecture": True,
         "label": "pissed-off-gov",
         "spec": UNKILL_SPEC,
         "build": SPEC,
         "author": AUTHOR,
         "factors": factors,
+        "planes": planes
+        or {
+            "plane_b_doi": plane_b_doi,
+            "plane_c_offline_verify": c_ok,
+        },
+        "gates": {
+            "plane_b_doi": doi_ok,
+            "plane_c_offline_verify": c_ok,
+            "fielded_ready": gates,
+        },
         "real_mock": {
             "photon": "REAL",
             "cold_copy": "REAL",
@@ -130,6 +172,9 @@ def compute_unkillability(
             "live_bt_link": False,
             "live_wifi_link": False,
             "live_flash": False,
+            "plane_a_independent": False,
+            "plane_b_doi": "REAL" if doi_ok else "SLOT",
+            "plane_c_offline_verify": "REAL" if c_ok else "READY",
         },
         "channels_on": list(CHANNELS_ON) if fabric_enabled else [],
         "device_classes": list(DEVICE_CLASSES),

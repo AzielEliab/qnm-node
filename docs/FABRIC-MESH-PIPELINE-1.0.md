@@ -166,10 +166,18 @@ erase the tip.
 **Bitmesh geo (internal).** Geohash binds to tip on the internal
 bitmesh plane for routing only. Public receipts stay no user / geo.
 
-**Pissed-off-gov unkillability.** Target **80+** when fabric is
-armed. Score is copy-cost + law + armed channels. REAL vs MOCK is
-labeled. PHY hooks stay HOOK-PENDING. This is not a live RF mesh
-claim. `GET /local/unkillability`.
+**Pissed-off-gov unkillability.** Architecture ≠ fielded.
+`architecture_score` may be high (law + armed channels + persist).
+`fielded_score` / `score` is the hub-safe number. Fielded band today
+is **68–70** (Cap-7 live + armed HOOK-PENDING) until Plane B has a
+real Zenodo DOI **and** Plane C has an offline-verify receipt.
+`meets_target` is true only when those fielded gates pass. Hubs must
+**not** publish `architecture_score` or 100. Plane A hubs are LIVE on
+the **same CF tunnel** — not four independent copies. Plane B DOI is
+null (SLOT) until seated. Plane C USB pack is READY, not verified, until
+an offline receipt. Do not invent a DOI or airgap success.
+`GET /local/unkillability`. PHY hooks stay HOOK-PENDING. This is not
+a live RF mesh claim.
 
 Restriction walks the next class inside the same call. `force_via`
 restricted ⇒ wait. No silent remap. Packet id does not change.
