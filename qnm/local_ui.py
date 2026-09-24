@@ -222,9 +222,10 @@ def render_response(route: str, code: int, payload: dict[str, Any], node: Any | 
             spec=str(body.get("spec") or ""),
         )
     if path in ("/local/fabric", "/local/channels"):
+        heading = "Channels" if path == "/local/channels" else "Fabric"
         return _page(
-            title="Fabric",
-            heading="Fabric",
+            title=heading,
+            heading=heading,
             active=path,
             body=_fabric_body(body),
             author=str(body.get("author") or ""),

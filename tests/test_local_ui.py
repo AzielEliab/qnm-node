@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 
 from qnm.boot import QNMRefuse
-from qnm.local_ui import explain_refuse, prefers_html, render_dashboard
+from qnm.local_ui import explain_refuse, prefers_html, render_dashboard, render_response
 from qnm.node import Node, serve
 from qnm.surface import SECURITY_HEADERS
 
@@ -193,6 +193,15 @@ def test_dashboard_render_has_empty_and_booted_states(tmp_path: Path) -> None:
     assert "boot" in page
     assert "architecture_score" not in page
     assert "fielded_score" not in page
+    assert node.fabric.enabled is False
+
+
+def test_channels_page_keeps_its_own_heading(tmp_path: Path) -> None:
+    node = Node(tmp_path)
+    _code, payload = node.handle("GET", "/local/channels", b"")
+    page = render_response("/local/channels", 200, payload, node=node)
+    assert "<h1>Channels</h1>" in page
+    assert "No channel stamp yet." not in page
     assert node.fabric.enabled is False
 
 
