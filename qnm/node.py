@@ -50,7 +50,17 @@ from qnm.bitmesh import Bitmesh, refuse_public_geo
 from qnm.coldcopy import DEVICE_CLASSES, ColdCopy
 from qnm.fabric import CLAIM_CLOCK, FABRIC_SPEC, Fabric, mesh_never_enables, mesh_relay_route
 from qnm.planes import Planes
-from qnm.local_ui import HTML_SECURITY_HEADERS, prefers_html, render_dashboard, render_response
+from qnm.local_ui import (
+    HTML_SECURITY_HEADERS,
+    cli_doctor,
+    cli_score,
+    cli_status,
+    explain_refuse,
+    prefers_html,
+    render_dashboard,
+    render_response,
+    serve_line,
+)
 from qnm.surface import SECURITY_HEADERS, refuse_wan_bind, require_operator_token, token_from_headers
 from qnsd.vias import radios_stamp
 from qnm.unkillability import compute_unkillability
@@ -1596,6 +1606,13 @@ class _Handler(BaseHTTPRequestHandler):
     def _route(self) -> str:
         return urlparse(self.path).path.rstrip("/") or "/"
 
+    def _local_page_url(self) -> str:
+        addr = getattr(self.server, "server_address", None)
+        if not addr or len(addr) < 2:
+            return ""
+        host, port = addr[0], addr[1]
+        return f"http://{host}:{port}/local/ui"
+
     def _send_html(self, code: int, page: str) -> None:
         raw = page.encode("utf-8")
         self.send_response(code)
@@ -1611,7 +1628,10 @@ class _Handler(BaseHTTPRequestHandler):
         if self.headers is not None:
             accept = str(self.headers.get("Accept") or "")
         if prefers_html(accept):
-            self._send_html(code, render_response(route, code, payload, node=self.node))
+            self._send_html(
+                code,
+                render_response(route, code, payload, node=self.node, local_url=self._local_page_url()),
+            )
             return
         raw = json.dumps(payload, sort_keys=True).encode("utf-8")
         self.send_response(code)
@@ -1649,7 +1669,7 @@ class _Handler(BaseHTTPRequestHandler):
             return
         route = self._route()
         if route in ("/local", "/local/ui") and prefers_html(str(self.headers.get("Accept") or "")):
-            self._send_html(200, render_dashboard(self.node))
+            self._send_html(200, render_dashboard(self.node, local_url=self._local_page_url()))
             return
         code, payload = self.node.handle("GET", self.path, b"", actor=actor, peer=self.client_address[0])
         self._send(code, payload, route=route)
@@ -1681,16 +1701,127 @@ def serve(
     return server
 
 
+_HELP_DESCRIPTION = """Local node on this machine. The door listens on 127.0.0.1.
+
+commands:
+  serve     Start the local page
+  ui        Same as serve
+  boot      Install, or resume a lock already on disk
+  state     Short status (this is the default)
+  doctor    Plain pass or fail for this install
+  score     Local posture report for machines (use --json)
+"""
+
+_HELP_EPILOG = """examples:
+  qnm-node
+  qnm-node serve
+  qnm-node doctor
+  qnm-node state --json
+
+Author: Aziel Eliab
+"""
+
+
+class _Parser(argparse.ArgumentParser):
+    def error(self, message: str) -> None:
+        text = message
+        if message.startswith("unrecognized arguments:"):
+            extra = message.split(":", 1)[1].strip()
+            text = f"Unknown argument {extra}."
+        print(f"qnm-node: {text}", file=sys.stderr)
+        print("Try: qnm-node --help", file=sys.stderr)
+        self.exit(2)
+
+
+def _print_json(payload: dict[str, Any]) -> None:
+    print(json.dumps(payload, indent=2, sort_keys=True))
+
+
+def _fail_refuse(exc: QNMRefuse, *, as_json: bool) -> int:
+    if as_json:
+        print(json.dumps(exc.as_dict(), indent=2, sort_keys=True), file=sys.stderr)
+        return 2
+    print(explain_refuse(exc.code, exc.detail), file=sys.stderr)
+    print("Try: qnm-node --help", file=sys.stderr)
+    return 2
+
+
+def _resume_if_locked(node: Node, root: Path) -> None:
+    lock = load_lock(root)
+    if lock and not lock.get("scorched") and node.state == "COLD":
+        node.boot()
+
+
+def _doctor_report(node: Node) -> dict[str, Any]:
+    return {
+        "ok": True,
+        "identity": IDENTITY,
+        "author": AUTHOR,
+        "mesh_handle": node.fed.owner.handle,
+        "anonymity": False,
+        "e2e": "x25519-hkdf-sha256-aes-256-gcm",
+        "e2e_forward_secrecy": False,
+        "nat_traversal": False,
+        "relay_listen": node.fed.relay_on,
+        "raw_leaves_only_on_share": True,
+        "spec": SPEC,
+        "companion": COMPANION,
+        "hub_law": HUB_LAW,
+        "pair_bind": PAIR_SPEC,
+        "radios": radios_stamp(node.fabric.enabled),
+        "radios_fielded": False,
+        "radios_status": node.fabric.status().get("radios_status") or "ABSENT",
+        "bind": DEFAULT_BIND,
+        "hop_max": HOP_MAX_DEFAULT,
+        "bell_pair": False,
+        "qubit": False,
+        "forbidden_live_symbols": ["Lumen", "Mandible", "lattice_online", "mesh_complete"],
+        "fabric": FABRIC_SPEC,
+        "channels": node.fabric.channel_audit(),
+        "node_gate": False,
+        "az_generator": False,
+        "mesh_enable": False,
+        "zenodo_required": False,
+        "control_plane": "qnm",
+        "wan_bind": False,
+        "redline": "REDLINE-1.0",
+    }
+
+
+def _serve_banner(port: int) -> dict[str, Any]:
+    return {
+        "ok": True,
+        "bind": DEFAULT_BIND,
+        "port": port,
+        "spec": SPEC,
+        "author": AUTHOR,
+    }
+
+
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(
+    parser = _Parser(
         prog="qnm-node",
-        description="QNM-BUILD-1.0 local node + AIH-WP-1.3 spiderweb pair-bind",
+        usage=(
+            "%(prog)s [-h] [--json] [--root ROOT] [--data-dir DATA_DIR]\n"
+            "                [--profile PROFILE] [--port PORT] [--relay RELAY]\n"
+            "                [command]"
+        ),
+        description=_HELP_DESCRIPTION,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=_HELP_EPILOG,
     )
-    parser.add_argument("cmd", nargs="?", default="state", help="boot|state|serve|doctor|score")
+    parser.add_argument(
+        "cmd",
+        nargs="?",
+        default="state",
+        metavar="command",
+        help=argparse.SUPPRESS,
+    )
+    parser.add_argument("--json", action="store_true", help="machine-readable output")
     parser.add_argument("--root", default=".", help="install root directory")
     parser.add_argument("--data-dir", default=None, help="instance data directory (alias of --root)")
     parser.add_argument("--profile", default=None, help="named instance under profiles/<name>")
-    parser.add_argument("--port", type=int, default=DEFAULT_PORT)
+    parser.add_argument("--port", type=int, default=DEFAULT_PORT, help="loopback port (default 8891)")
     parser.add_argument(
         "--relay",
         action="append",
@@ -1701,64 +1832,44 @@ def main(argv: list[str] | None = None) -> int:
     try:
         root = instance_directory(args.root, args.data_dir, args.profile)
     except QNMRefuse as exc:
-        print(json.dumps(exc.as_dict(), indent=2, sort_keys=True), file=sys.stderr)
-        return 2
+        return _fail_refuse(exc, as_json=args.json)
     passphrase = os.environ.get("QNM_NODE_PASSPHRASE") or None
     node = Node(root, passphrase=passphrase)
     if args.relay:
         node.fed.set_relays(list(args.relay))
+    cmd = "serve" if args.cmd == "ui" else args.cmd
     try:
-        if args.cmd == "boot":
-            print(json.dumps(node.boot(), indent=2, sort_keys=True))
+        if cmd == "boot":
+            payload = node.boot()
+            if args.json:
+                _print_json(payload)
+            else:
+                print(cli_status(node.snapshot(), port=args.port), end="")
             return 0
-        if args.cmd == "state":
-            lock = load_lock(root)
-            if lock and not lock.get("scorched") and node.state == "COLD":
-                node.boot()
-            print(json.dumps(node.snapshot(), indent=2, sort_keys=True))
+        if cmd == "state":
+            _resume_if_locked(node, root)
+            if args.json:
+                _print_json(node.snapshot())
+            else:
+                print(cli_status(node.snapshot(), port=args.port), end="")
             return 0
-        if args.cmd == "score":
+        if cmd == "score":
             if node.state == "COLD":
                 node.boot()
-            print(json.dumps(node.score(), indent=2, sort_keys=True))
+            payload = node.score()
+            if args.json:
+                _print_json(payload)
+            else:
+                print(cli_score(payload), end="")
             return 0
-        if args.cmd == "doctor":
-            report = {
-                "ok": True,
-                "identity": IDENTITY,
-                "author": AUTHOR,
-                "mesh_handle": node.fed.owner.handle,
-                "anonymity": False,
-                "e2e": "x25519-hkdf-sha256-aes-256-gcm",
-                "e2e_forward_secrecy": False,
-                "nat_traversal": False,
-                "relay_listen": node.fed.relay_on,
-                "raw_leaves_only_on_share": True,
-                "spec": SPEC,
-                "companion": COMPANION,
-                "hub_law": HUB_LAW,
-                "pair_bind": PAIR_SPEC,
-                "radios": radios_stamp(node.fabric.enabled),
-                "radios_fielded": False,
-                "radios_status": node.fabric.status().get("radios_status") or "ABSENT",
-                "bind": DEFAULT_BIND,
-                "hop_max": HOP_MAX_DEFAULT,
-                "bell_pair": False,
-                "qubit": False,
-                "forbidden_live_symbols": ["Lumen", "Mandible", "lattice_online", "mesh_complete"],
-                "fabric": FABRIC_SPEC,
-                "channels": node.fabric.channel_audit(),
-                "node_gate": False,
-                "az_generator": False,
-                "mesh_enable": False,
-                "zenodo_required": False,
-                "control_plane": "qnm",
-                "wan_bind": False,
-                "redline": "REDLINE-1.0",
-            }
-            print(json.dumps(report, indent=2, sort_keys=True))
+        if cmd == "doctor":
+            report = _doctor_report(node)
+            if args.json:
+                _print_json(report)
+            else:
+                print(cli_doctor(report, port=args.port), end="")
             return 0
-        if args.cmd == "serve":
+        if cmd == "serve":
             if node.state == "COLD":
                 lock = load_lock(root)
                 if lock and not lock.get("scorched"):
@@ -1766,27 +1877,18 @@ def main(argv: list[str] | None = None) -> int:
                 else:
                     node.boot()
             server = serve(node, DEFAULT_BIND, args.port)
-            print(
-                json.dumps(
-                    {
-                        "ok": True,
-                        "bind": DEFAULT_BIND,
-                        "port": args.port,
-                        "spec": SPEC,
-                        "author": AUTHOR,
-                    },
-                    sort_keys=True,
-                ),
-                flush=True,
-            )
+            if args.json:
+                print(json.dumps(_serve_banner(args.port), sort_keys=True), flush=True)
+            else:
+                print(serve_line(args.port), end="", flush=True)
             try:
                 server.serve_forever()
             except KeyboardInterrupt:
                 server.shutdown()
             return 0
-        print(json.dumps(QNMRefuse("QNM-LOOPBACK-ONLY", args.cmd).as_dict()), file=sys.stderr)
+        print(f'Unknown command "{args.cmd}".', file=sys.stderr)
+        print("Try: qnm-node serve   or   qnm-node --help", file=sys.stderr)
         return 2
     except QNMRefuse as exc:
-        print(json.dumps(exc.as_dict(), indent=2, sort_keys=True), file=sys.stderr)
-        return 2
+        return _fail_refuse(exc, as_json=args.json)
 

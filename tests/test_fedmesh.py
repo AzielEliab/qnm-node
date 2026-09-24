@@ -140,9 +140,9 @@ def test_cli_profiles_and_doctor(tmp_path: Path) -> None:
     import contextlib
 
     with contextlib.redirect_stdout(first):
-        assert main(["doctor", "--data-dir", str(base), "--profile", "alpha"]) == 0
+        assert main(["doctor", "--json", "--data-dir", str(base), "--profile", "alpha"]) == 0
     with contextlib.redirect_stdout(second):
-        assert main(["doctor", "--data-dir", str(base), "--profile", "beta"]) == 0
+        assert main(["doctor", "--json", "--data-dir", str(base), "--profile", "beta"]) == 0
     alpha = json.loads(first.getvalue())
     beta = json.loads(second.getvalue())
     assert alpha["identity"] == "Aziel Eliab"

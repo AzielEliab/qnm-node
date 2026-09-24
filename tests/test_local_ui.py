@@ -103,6 +103,12 @@ def test_json_body_unchanged_and_html_is_separate(tmp_path: Path) -> None:
         assert ctype.startswith("text/html")
         text = html.decode("utf-8")
         assert "LOCAL" in text
+        assert "Open overview" in text
+        assert f"{url}/local/ui" in text
+        advanced = text.find("<summary>Advanced</summary>")
+        assert advanced > 0
+        assert node.install_root not in text[:advanced]
+        assert node.install_root in text[advanced:]
         assert "No install yet" not in text
         assert "architecture_score" not in text
         assert "fielded_score" not in text
@@ -191,6 +197,14 @@ def test_dashboard_render_has_empty_and_booted_states(tmp_path: Path) -> None:
     assert node.install_root in page
     assert "Receipt tip" in page
     assert "boot" in page
+    advanced = page.find("<summary>Advanced</summary>")
+    assert advanced > 0
+    assert node.install_root not in page[:advanced]
+    assert "Open overview" in page
+    assert "#c9a227" in page
+    assert "prefers-color-scheme: dark" in page
+    assert "color-scheme: light dark" in page
+    assert ":focus-visible" in page
     assert "architecture_score" not in page
     assert "fielded_score" not in page
     assert node.fabric.enabled is False

@@ -180,7 +180,7 @@ def explain_refuse(code: str, detail: str = "") -> str:
     return "The door refused this request."
 
 
-def render_dashboard(node: Any) -> str:
+def render_dashboard(node: Any, local_url: str = "") -> str:
     """Read-only status page. Does not boot, enable, or write."""
     snap = node.snapshot()
     receipts = list(node.receipts())
@@ -191,18 +191,26 @@ def render_dashboard(node: Any) -> str:
         body=_dashboard_body(snap, receipts),
         author=str(snap.get("author") or ""),
         spec=str(snap.get("spec") or ""),
+        local_url=local_url,
+        intro="This page reads the local node on this machine.",
     )
 
 
-def render_response(route: str, code: int, payload: dict[str, Any], node: Any | None = None) -> str:
+def render_response(
+    route: str,
+    code: int,
+    payload: dict[str, Any],
+    node: Any | None = None,
+    local_url: str = "",
+) -> str:
     """Human page for one door response. JSON payload is not rewritten."""
     body = payload if isinstance(payload, dict) else {}
     if body.get("refused") is True or (code >= 400 and body.get("code")):
-        return render_refusal(body, route=route)
+        return render_refusal(body, route=route, local_url=local_url)
     path = route or ""
     if path in HTML_DASHBOARD_ROUTES or path == "/local/state":
         if node is not None:
-            return render_dashboard(node)
+            return render_dashboard(node, local_url=local_url)
         return _page(
             title="Local node",
             heading="Local node",
@@ -210,6 +218,8 @@ def render_response(route: str, code: int, payload: dict[str, Any], node: Any | 
             body=_dashboard_body(body, []),
             author=str(body.get("author") or ""),
             spec=str(body.get("spec") or ""),
+            local_url=local_url,
+            intro="This page reads the local node on this machine.",
         )
     if path == "/local/receipts":
         rows = body.get("receipts") if isinstance(body.get("receipts"), list) else []
@@ -220,6 +230,7 @@ def render_response(route: str, code: int, payload: dict[str, Any], node: Any | 
             body=_receipts_body(rows),
             author=str(body.get("author") or ""),
             spec=str(body.get("spec") or ""),
+            local_url=local_url,
         )
     if path in ("/local/fabric", "/local/channels"):
         heading = "Channels" if path == "/local/channels" else "Fabric"
@@ -230,6 +241,7 @@ def render_response(route: str, code: int, payload: dict[str, Any], node: Any | 
             body=_fabric_body(body),
             author=str(body.get("author") or ""),
             spec=str(body.get("spec") or ""),
+            local_url=local_url,
         )
     if path == "/local/phy":
         return _page(
@@ -239,6 +251,7 @@ def render_response(route: str, code: int, payload: dict[str, Any], node: Any | 
             body=_phy_body(body),
             author=str(body.get("author") or ""),
             spec=str(body.get("spec") or ""),
+            local_url=local_url,
         )
     if path == "/local/outbox":
         items = body.get("outbox") if isinstance(body.get("outbox"), list) else []
@@ -249,6 +262,7 @@ def render_response(route: str, code: int, payload: dict[str, Any], node: Any | 
             body=_outbox_body(items),
             author="",
             spec="",
+            local_url=local_url,
         )
     if path == "/local/pairs":
         items = body.get("pairs") if isinstance(body.get("pairs"), list) else []
@@ -259,6 +273,7 @@ def render_response(route: str, code: int, payload: dict[str, Any], node: Any | 
             body=_pairs_body(items),
             author=str(body.get("author") or ""),
             spec=str(body.get("spec") or ""),
+            local_url=local_url,
         )
     return _page(
         title="Local status",
@@ -267,10 +282,11 @@ def render_response(route: str, code: int, payload: dict[str, Any], node: Any | 
         body=_focused_body(path, body),
         author=str(body.get("author") or ""),
         spec=str(body.get("spec") or ""),
+        local_url=local_url,
     )
 
 
-def render_refusal(payload: dict[str, Any], route: str = "") -> str:
+def render_refusal(payload: dict[str, Any], route: str = "", local_url: str = "") -> str:
     code = str(payload.get("code") or "")
     detail = str(payload.get("detail") or "")
     reason = explain_refuse(code, detail)
@@ -287,6 +303,7 @@ def render_refusal(payload: dict[str, Any], route: str = "") -> str:
         body=inner,
         author=str(payload.get("author") or ""),
         spec=str(payload.get("spec") or ""),
+        local_url=local_url,
     )
 
 
@@ -379,7 +396,6 @@ def _dashboard_body(snap: dict[str, Any], receipts: list[dict[str, Any]]) -> str
     state = str(snap.get("state") or "")
     sentence = _STATE_PLAIN.get(state, f"Recorded state is {state}." if state else "No state recorded.")
     install = str(snap.get("install_root") or "").strip()
-    boot = _rows([("Install root", install)]) if install else _empty("No install yet.")
     bearers = snap.get("bearers") if isinstance(snap.get("bearers"), dict) else {}
     chain = snap.get("chain") if isinstance(snap.get("chain"), dict) else {}
     fabric = snap.get("fabric") if isinstance(snap.get("fabric"), dict) else {}
@@ -388,30 +404,21 @@ def _dashboard_body(snap: dict[str, Any], receipts: list[dict[str, Any]]) -> str
     state_rows: list[tuple[str, str]] = [("State", state or "unknown")]
     if handle:
         state_rows.append(("Handle", handle))
-    bind = str(snap.get("bind") or "127.0.0.1")
-    state_rows.append(("Bind", bind))
+    state_rows.append(("Bind", str(snap.get("bind") or "127.0.0.1")))
     parts = [
         f"<p class=\"state\">{_esc(state or 'unknown')}</p>",
         f"<p class=\"lead\">{_esc(sentence)}</p>",
-        _section("Boot", boot),
-        _section("Posture", _rows(state_rows)),
-        _section("Bearers", _bearers_body(bearers)),
-        _section("Receipts", _tip_body(chain, receipts)),
-        _section("Fabric and channels", _fabric_section(fabric, channels, snap)),
     ]
+    if not install:
+        parts.append(_section("Boot", _empty("No install yet.")))
+    parts.append(_section("Status", _rows(state_rows)))
+    parts.append(_section("Receipts", _receipt_summary(chain, receipts)))
+    parts.append(_section("Fabric", _fabric_lead(fabric)))
+    parts.append(_advanced_overview(snap, receipts, bearers, chain, channels))
     return "".join(parts)
 
 
-def _bearers_body(bearers: dict[str, Any]) -> str:
-    if not bearers:
-        return _empty("No bearers are recorded.")
-    ordered = [name for name in _BEARER_ORDER if name in bearers]
-    ordered.extend(sorted(name for name in bearers if name not in ordered))
-    rows = [(_bearer_name(name), _on_off(bearers.get(name))) for name in ordered]
-    return _rows(rows)
-
-
-def _tip_body(chain: dict[str, Any], receipts: list[dict[str, Any]]) -> str:
+def _receipt_summary(chain: dict[str, Any], receipts: list[dict[str, Any]]) -> str:
     length = int(chain.get("length") or 0)
     tip = chain.get("tip")
     parts: list[str] = []
@@ -419,15 +426,7 @@ def _tip_body(chain: dict[str, Any], receipts: list[dict[str, Any]]) -> str:
         parts.append(_empty("No receipt tip yet."))
     else:
         verify = "passed" if chain.get("ok") else "did not pass"
-        parts.append(
-            _rows(
-                [
-                    ("Receipt tip", str(tip)),
-                    ("Chain length", str(length)),
-                    ("Chain verify", verify),
-                ]
-            )
-        )
+        parts.append(_rows([("Chain length", str(length)), ("Chain verify", verify)]))
     if not receipts:
         parts.append(_empty("No receipts on disk yet."))
     else:
@@ -437,11 +436,67 @@ def _tip_body(chain: dict[str, Any], receipts: list[dict[str, Any]]) -> str:
                 [
                     ("Receipts on disk", str(len(receipts))),
                     ("Latest", str(last.get("kind") or "receipt")),
-                    ("Latest hash", str(last.get("hash") or last.get("receipt_hash") or "")),
                 ]
             )
         )
     return "".join(parts)
+
+
+def _fabric_lead(fabric: dict[str, Any]) -> str:
+    enabled = bool(fabric.get("enabled"))
+    if enabled:
+        lead = "The fabric software path is on. OS radio stamps come from adapters on this machine."
+    else:
+        lead = "The fabric software path is off."
+    return f"<p class=\"lead\">{_esc(lead)}</p>{_rows([('Software path', _on_off(enabled))])}"
+
+
+def _advanced_overview(
+    snap: dict[str, Any],
+    receipts: list[dict[str, Any]],
+    bearers: dict[str, Any],
+    chain: dict[str, Any],
+    channels: dict[str, Any],
+) -> str:
+    blocks: list[str] = []
+    hash_rows: list[tuple[str, str]] = []
+    install = str(snap.get("install_root") or "").strip()
+    if install:
+        hash_rows.append(("Install root", install))
+    length = int(chain.get("length") or 0)
+    tip = chain.get("tip")
+    if length > 0 and not _is_empty_tip(tip):
+        hash_rows.append(("Receipt tip", str(tip)))
+    if receipts and isinstance(receipts[-1], dict):
+        last = receipts[-1]
+        digest = str(last.get("hash") or last.get("receipt_hash") or "").strip()
+        if digest:
+            hash_rows.append(("Latest hash", digest))
+    if hash_rows:
+        blocks.append(_section("Hashes", _rows(hash_rows)))
+    blocks.append(_section("Bearers", _bearers_body(bearers)))
+    radios = str(snap.get("radios_status") or "").strip()
+    radio_bits = []
+    if radios:
+        radio_bits.append(_rows([("Radios", _fielding_words(radios))]))
+    radio_bits.append(_channel_rows(channels))
+    blocks.append(_section("Radios and channels", "".join(radio_bits)))
+    return _details("Advanced", "".join(blocks))
+
+
+def _details(summary: str, inner: str) -> str:
+    if not str(inner or "").strip():
+        return ""
+    return f"<details><summary>{_esc(summary)}</summary>{inner}</details>"
+
+
+def _bearers_body(bearers: dict[str, Any]) -> str:
+    if not bearers:
+        return _empty("No bearers are recorded.")
+    ordered = [name for name in _BEARER_ORDER if name in bearers]
+    ordered.extend(sorted(name for name in bearers if name not in ordered))
+    rows = [(_bearer_name(name), _on_off(bearers.get(name))) for name in ordered]
+    return _rows(rows)
 
 
 def _receipts_body(receipts: list[Any]) -> str:
@@ -678,14 +733,100 @@ def _focused_body(route: str, payload: dict[str, Any]) -> str:
     return _empty("Nothing further to show on this path.")
 
 
-def _page(*, title: str, heading: str, active: str, body: str, author: str, spec: str) -> str:
-    nav = _nav(active)
+def open_hint(port: int) -> str:
+    """One next step: start the loopback door, then open the local page."""
+    if int(port) == 8891:
+        return "Run qnm-node serve, then open http://127.0.0.1:8891/local/ui"
+    return f"Run qnm-node serve --port {int(port)}, then open http://127.0.0.1:{int(port)}/local/ui"
+
+
+def cli_status(snap: dict[str, Any], *, port: int) -> str:
+    """Short human status. The snapshot dict itself stays on --json."""
+    state = str(snap.get("state") or "")
+    sentence = _STATE_PLAIN.get(state, f"Recorded state is {state}." if state else "No state recorded.")
+    bearers = snap.get("bearers") if isinstance(snap.get("bearers"), dict) else {}
+    fabric = snap.get("fabric") if isinstance(snap.get("fabric"), dict) else {}
+    chain = snap.get("chain") if isinstance(snap.get("chain"), dict) else {}
+    length = int(chain.get("length") or 0)
+    if length <= 0 or _is_empty_tip(chain.get("tip")):
+        receipts = "none yet"
+    else:
+        receipts = str(length)
+    lines = [
+        "Local node",
+        f"State: {state or 'unknown'}",
+        sentence,
+        f"Bind: {snap.get('bind') or '127.0.0.1'}",
+        f"Operator bearer: {_on_off(bearers.get('operator')).lower()}",
+        f"Fabric software path: {_on_off(fabric.get('enabled')).lower()}",
+        f"Receipts: {receipts}",
+        "",
+        open_hint(port),
+    ]
+    return "\n".join(lines) + "\n"
+
+
+def cli_doctor(report: dict[str, Any], *, port: int) -> str:
+    """Plain pass or fail. The doctor dict itself stays on --json."""
+    ok = report.get("ok") is True
+    radios = str(report.get("radios_status") or "").strip() or "unrecorded"
+    lines = [
+        "Doctor",
+        "Pass — local checks recorded." if ok else "Fail — local checks did not pass.",
+        f"Author: {report.get('author') or ''}".rstrip(),
+        f"Bind: {report.get('bind') or '127.0.0.1'}",
+        f"Radios: {radios}",
+        f"Relay listen: {'on' if report.get('relay_listen') else 'off'}",
+        f"Mesh enable: {'on' if report.get('mesh_enable') else 'off'}",
+    ]
+    handle = str(report.get("mesh_handle") or "").strip()
+    if handle:
+        lines.insert(3, f"Handle: {handle}")
+    lines.extend(["", open_hint(port)])
+    return "\n".join(lines) + "\n"
+
+
+def cli_score(report: dict[str, Any]) -> str:
+    """Human posture lines. The numeric report stays on --json."""
+    posture = str(report.get("posture") or "").strip() or "unrecorded"
+    inputs = report.get("inputs") if isinstance(report.get("inputs"), dict) else {}
+    length = inputs.get("chain_length")
+    length_line = f"Chain length: {length}" if length is not None else "Chain length: unrecorded"
+    return (
+        "Local posture\n"
+        f"Posture: {posture}\n"
+        f"{length_line}\n"
+        "This report uses the local chain and posture.\n"
+        "\n"
+        "Run: qnm-node score --json\n"
+    )
+
+
+def serve_line(port: int) -> str:
+    return f"Open http://127.0.0.1:{int(port)}/local/ui\n"
+
+
+def _page(
+    *,
+    title: str,
+    heading: str,
+    active: str,
+    body: str,
+    author: str,
+    spec: str,
+    local_url: str = "",
+    intro: str = "",
+) -> str:
     foot_bits = ["127.0.0.1 loopback door"]
     if spec:
         foot_bits.append(spec)
     if author:
         foot_bits.append(author)
     footer = " · ".join(_esc(bit) for bit in foot_bits)
+    lead = f"<p class=\"lead\">{_esc(intro)}</p>" if intro else ""
+    url = ""
+    if local_url:
+        url = f"<p class=\"quiet url-line\">Local page <span class=\"url\">{_esc(local_url)}</span></p>"
     return (
         "<!DOCTYPE html>\n"
         "<html lang=\"en\">\n"
@@ -697,8 +838,10 @@ def _page(*, title: str, heading: str, active: str, body: str, author: str, spec
         "</head>\n"
         "<body>\n"
         "<main>\n"
-        f"{nav}\n"
+        f"{_header(active)}\n"
         f"<h1>{_esc(heading)}</h1>\n"
+        f"{lead}\n"
+        f"{url}\n"
         f"{body}\n"
         f"<footer>{footer}</footer>\n"
         "</main>\n"
@@ -707,46 +850,106 @@ def _page(*, title: str, heading: str, active: str, body: str, author: str, spec
     )
 
 
-def _nav(active: str) -> str:
+def _header(active: str) -> str:
+    on_overview = active in ("/local", "/local/ui")
+    current = " aria-current=\"page\"" if on_overview else ""
     links = (
-        ("/local/ui", "Overview"),
         ("/local/receipts", "Receipts"),
         ("/local/fabric", "Fabric"),
         ("/local/channels", "Channels"),
         ("/local/phy", "Radios"),
     )
-    parts = ["<nav>"]
+    parts = [
+        "<header>",
+        f"<a class=\"primary\" href=\"/local/ui\"{current}>Open overview</a>",
+        "<details class=\"more\"><summary>More</summary><nav>",
+    ]
     for href, label in links:
-        current = " aria-current=\"page\"" if href == active or (active == "/local" and href == "/local/ui") else ""
-        parts.append(f"<a href=\"{_esc(href)}\"{current}>{_esc(label)}</a>")
-    parts.append("</nav>")
+        here = " aria-current=\"page\"" if href == active else ""
+        parts.append(f"<a href=\"{_esc(href)}\"{here}>{_esc(label)}</a>")
+    parts.append("</nav></details></header>")
     return "".join(parts)
 
 
 _CSS = """
-:root { color-scheme: light; --bg: #f4f1ea; --ink: #1c1915; --muted: #4a453c; --line: #e2dcd2; --accent: #1f4d45; }
+:root {
+  color-scheme: light dark;
+  --bg: #f4f1ea;
+  --ink: #1c1915;
+  --muted: #4a453c;
+  --line: #e2dcd2;
+  --accent: #1f4d45;
+  --gold: #c9a227;
+  --primary: #1f4d45;
+  --on-primary: #f7f4ee;
+  --focus-edge: #1c1915;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #12110f;
+    --ink: #f3efe6;
+    --muted: #c8c0b4;
+    --line: #2e2a24;
+    --accent: #e4d7a8;
+    --gold: #c9a227;
+    --primary: #c9a227;
+    --on-primary: #1a160f;
+    --focus-edge: #f3efe6;
+  }
+}
 * { box-sizing: border-box; }
-body { margin: 0; background: var(--bg); color: var(--ink); font: 17px/1.5 Georgia, "Iowan Old Style", Palatino, "Palatino Linotype", serif; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font: 17px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
 main { max-width: 40rem; margin: 0 auto; padding: 2.25rem 1.25rem 3.5rem; }
-nav { display: flex; flex-wrap: wrap; gap: 0.35rem 1rem; margin: 0 0 1.5rem; }
-nav a { color: var(--accent); text-decoration: none; }
-nav a[aria-current="page"] { text-decoration: underline; text-underline-offset: 0.2em; }
-h1 { font-size: 1.85rem; font-weight: 500; letter-spacing: -0.02em; margin: 0 0 0.75rem; }
+header { display: flex; flex-wrap: wrap; align-items: center; gap: 0.75rem 1.25rem; margin: 0 0 1.5rem; }
+a.primary {
+  display: inline-block;
+  background: var(--primary);
+  color: var(--on-primary);
+  text-decoration: none;
+  font-weight: 600;
+  padding: 0.7rem 1.15rem;
+  border-radius: 999px;
+}
+a:focus-visible, summary:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 3px;
+  box-shadow: 0 0 0 3px var(--focus-edge);
+}
+details.more summary {
+  cursor: pointer;
+  color: var(--accent);
+  font-weight: 600;
+  padding: 0.35rem 0.1rem;
+}
+details.more nav { display: flex; flex-direction: column; gap: 0.35rem; padding: 0.55rem 0 0.2rem; }
+details.more nav a { color: var(--accent); text-decoration: none; }
+details.more nav a[aria-current="page"] { text-decoration: underline; text-underline-offset: 0.2em; }
+h1 { font-size: 1.85rem; font-weight: 600; letter-spacing: -0.02em; margin: 0 0 0.75rem; }
 h2 { font-size: 0.78rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); margin: 0 0 0.45rem; }
 section { margin: 0 0 1.6rem; }
 p { margin: 0 0 0.75rem; }
-.state { color: var(--accent); font-size: 1.2rem; margin: 0 0 0.35rem; }
+.state { color: var(--accent); font-size: 1.2rem; font-weight: 600; margin: 0 0 0.35rem; }
 .lead { color: var(--ink); }
 .quiet, footer { color: var(--muted); font-size: 0.92rem; }
+.url { overflow-wrap: anywhere; }
 .code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.95rem; color: var(--accent); }
 ul { list-style: none; padding: 0; margin: 0 0 0.75rem; }
 li { display: flex; justify-content: space-between; gap: 1rem; padding: 0.55rem 0; border-top: 1px solid var(--line); }
 li .meta { color: var(--muted); text-align: right; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
 .empty { color: var(--muted); margin: 0; padding: 0.7rem 0; border-top: 1px solid var(--line); }
+details { margin: 0.4rem 0 1.2rem; }
+details summary { cursor: pointer; color: var(--accent); font-weight: 600; padding: 0.35rem 0; }
 footer { margin-top: 2rem; }
 @media (max-width: 420px) {
   main { padding: 1.35rem 1rem 2.5rem; }
   h1 { font-size: 1.55rem; }
+  header { flex-direction: column; align-items: stretch; }
+  a.primary { text-align: center; }
   li { flex-direction: column; gap: 0.15rem; }
   li .meta { text-align: left; }
 }
