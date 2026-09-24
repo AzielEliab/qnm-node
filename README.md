@@ -167,6 +167,20 @@ never an argument.
 [docs/ATTACK-SURFACE-1.0.md](docs/ATTACK-SURFACE-1.0.md) and
 [docs/REDLINE-1.0.md](docs/REDLINE-1.0.md).
 
+## Download
+
+Version **1.6.0** is `pyproject.toml` and `qnm.__version__`. No GitHub
+release is published. The source archive is
+`workers/download-tracker/public/qnm-node-1.6.0.tar.gz`, packed from
+this repository.
+
+Worker name: `qnm-node-download-tracker`. After a teammate deploys it,
+the route is
+https://qnm-node-download-tracker.vibelock.workers.dev/
+and `GET /download` returns that archive and counts the download by
+branch and fork. This repository does not deploy the Worker. See
+[workers/download-tracker/README.md](workers/download-tracker/README.md).
+
 Local API binds **127.0.0.1:8891** only:
 
 | Path | Act |
@@ -247,6 +261,7 @@ docs/FABRIC-MESH-PIPELINE-1.0.md
 docs/DESIGN-INDEX.md
 tests/               QNM §14 + AIH-WP-1.3 + QNS-CD-1.0 §14
                      + fabric pipeline + attack-surface
+workers/download-tracker/   landing + counted /download (deploy separately)
 ```
 
 ## Tests (§14 + AIH-WP-1.3 + QNS-CD-1.0)

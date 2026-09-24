@@ -1,0 +1,23 @@
+name = "qnm-node-download-tracker"
+main = "src/index.js"
+compatibility_date = "2026-09-24"
+workers_dev = true
+account_id = "ac575a9b822bea2bed97d0ab73aed238"
+
+# PLACEHOLDER — not a live Cloudflare KV namespace.
+# Before deploy, create a dedicated namespace named QNM_NODE_DOWNLOADS and
+# replace both ids. Do not reuse another product's KV id.
+# `wrangler dev` simulates DOWNLOADS locally and does not create this namespace.
+[[kv_namespaces]]
+binding = "DOWNLOADS"
+id = "00000000000000000000000000000000"
+preview_id = "00000000000000000000000000000000"
+
+[assets]
+directory = "./public"
+binding = "ASSETS"
+run_worker_first = ["/", "/download", "/download/*", "/qnm-node-1.6.0.tar.gz", "/stats", "/event", "/go", "/count", "/install.sh", "/v1", "/v1/*", "/openapi.json", "/mcp", "/mcp/", "/cite.json", "/sitemap.xml", "/robots.txt", "/llms.txt", "/ai.txt"]
+
+[observability]
+enabled = true
+head_sampling_rate = 1

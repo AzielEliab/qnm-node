@@ -1,0 +1,8 @@
+{
+  "name": "qnm-node-download-tracker",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test test/*.mjs"
+  }
+}

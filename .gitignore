@@ -20,3 +20,5 @@ data/witness/*
 *.shelf.key
 .qnm-shelf-key
 .env
+.wrangler/
+node_modules/
