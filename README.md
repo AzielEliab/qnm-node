@@ -137,7 +137,7 @@ python -m qnsd doctor
 ```
 
 Local-first edge mesh ([docs/FED-MESH-1.0.md](docs/FED-MESH-1.0.md)):
-each process keeps its own handle (`#` + 11 base32 chars of the signing
+each process keeps its own handle (`#` + 11 Crockford base32 chars of the signing
 key). Author identity stays **Aziel Eliab**. Keys, files, and tasks stay
 on the node. The default outbound post is a signed ref, receipt, or
 digest. Raw bytes leave only as an explicit end-to-end encrypted share.

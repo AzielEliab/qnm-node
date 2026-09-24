@@ -116,7 +116,8 @@ class DesignBook:
 
     def _folder(self, handle: str) -> Path:
         body = handle[1:] if handle.startswith("#") else handle
-        if not body or any(ch not in "abcdefghijklmnopqrstuvwxyz0123456789" for ch in body):
+        allowed = set("0123456789ABCDEFGHJKMNPQRSTVWXYZ")
+        if not body or any(ch not in allowed for ch in body):
             raise QNMRefuse("FED-SLOT", "design handle refused")
         return self.root / body
 

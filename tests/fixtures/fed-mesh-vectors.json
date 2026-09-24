@@ -1,0 +1,285 @@
+{
+  "spec": "FED-MESH-1.0",
+  "title": "FED-MESH-1.0: Local-First Edge Mesh",
+  "author": "Aziel Eliab",
+  "seed_hex": "0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20",
+  "enc_seed_hex": "404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f",
+  "handle": "#CPV0CWYPXP4",
+  "public_key": "ebVWLo_mVPlAeLES6KmLp5AfhTrmlb7X4OORC60ElmQ",
+  "enc_public_key": "eaYx7t4b-cmPEgMs3q3Q56B5OY_HhriMyEbsia-FpRo",
+  "handle_length": 12,
+  "ref_update": {
+    "v": "FED-MESH-1.0",
+    "kind": "ref",
+    "handle": "#CPV0CWYPXP4",
+    "public_key": "ebVWLo_mVPlAeLES6KmLp5AfhTrmlb7X4OORC60ElmQ",
+    "ref": "heads/main",
+    "object_hash": "f56487a629550848508cbd6305d814f6008a1705ab4e215d926f6fda5e9c94dc",
+    "prev_ref": "0000000000000000000000000000000000000000000000000000000000000000",
+    "seq": 2,
+    "prev": "1111111111111111111111111111111111111111111111111111111111111111",
+    "sig": "EzHgvUyXbK8lMlwzC_e1DJ-pucqeKC2CQEBCvAhM_Igc2xgD8x32dta2EwmpG5Z2QZFHOsVEd3e-P1ZhlULSCg"
+  },
+  "ref_statement_hash": "06805b89889f62b379ae1dee9a7108f9ad37e23124c3ea111145d27438ceb708",
+  "object": {
+    "text": "local-first",
+    "hash": "f56487a629550848508cbd6305d814f6008a1705ab4e215d926f6fda5e9c94dc",
+    "body_b64": "bG9jYWwtZmlyc3Q"
+  },
+  "object_fetch_request": {
+    "v": "FED-MESH-1.0",
+    "kind": "object-fetch",
+    "hash": "f56487a629550848508cbd6305d814f6008a1705ab4e215d926f6fda5e9c94dc"
+  },
+  "object_fetch_response": {
+    "v": "FED-MESH-1.0",
+    "kind": "object",
+    "hash": "f56487a629550848508cbd6305d814f6008a1705ab4e215d926f6fda5e9c94dc",
+    "body_b64": "bG9jYWwtZmlyc3Q"
+  },
+  "receipt_hash": "49ef88c622177cd9662ea63d147589c9cea6c32adede83b7e7d127f853022dba",
+  "identity_anchor": {
+    "v": "FED-MESH-1.0",
+    "handle": "#CPV0CWYPXP4",
+    "public_key": "ebVWLo_mVPlAeLES6KmLp5AfhTrmlb7X4OORC60ElmQ",
+    "seq": 1,
+    "prev": "0000000000000000000000000000000000000000000000000000000000000000",
+    "receipt_hash": "49ef88c622177cd9662ea63d147589c9cea6c32adede83b7e7d127f853022dba",
+    "sig": "0OXT9sIHOYV-ZHvjP-qhLSY-GlVuwlja9UOXhCWV4c2LwEDmU3D5w597xIWdx4LQJgliyU3MJZBaScq4dfU4AQ"
+  },
+  "identity_anchor_ok": true,
+  "name_claim": {
+    "v": "FED-MESH-1.0",
+    "kind": "name",
+    "handle": "#CPV0CWYPXP4",
+    "public_key": "ebVWLo_mVPlAeLES6KmLp5AfhTrmlb7X4OORC60ElmQ",
+    "name": "library.aziel",
+    "owner": "#CPV0CWYPXP4",
+    "target": {
+      "type": "hash",
+      "value": "f56487a629550848508cbd6305d814f6008a1705ab4e215d926f6fda5e9c94dc"
+    },
+    "expires": null,
+    "seq": 2,
+    "prev": "11a622e89de2b80c48ffee9a6f9efe13e857e6643e539617c9dd481c0b36904d",
+    "prev_record": "0000000000000000000000000000000000000000000000000000000000000000",
+    "sig": "2PLK1U2papMuoD6Ux_SPuWwT_r_nxtKmcLmzAa3aCSLFMvGhp5T2-p2lNavR47MtnoxMmFPITL8yPS1LKu4gBA",
+    "pow": {
+      "nonce": "7e",
+      "bits": 8,
+      "digest": "0091860bcaeed0c2dbc3520fb74656e8d40045d1c31954108fd7d30e7d9a1a20"
+    }
+  },
+  "name_claim_statement_hash": "6d38408d305afb2ae562d3c022c3421fc8819c81d61108d3a8b91e2b8dc7ca7c",
+  "name_transfer": {
+    "v": "FED-MESH-1.0",
+    "kind": "name",
+    "handle": "#CPV0CWYPXP4",
+    "public_key": "ebVWLo_mVPlAeLES6KmLp5AfhTrmlb7X4OORC60ElmQ",
+    "name": "library.aziel",
+    "owner": "#4S11EZW09MD",
+    "target": {
+      "type": "handle",
+      "value": "#4S11EZW09MD"
+    },
+    "expires": null,
+    "seq": 3,
+    "prev": "6d38408d305afb2ae562d3c022c3421fc8819c81d61108d3a8b91e2b8dc7ca7c",
+    "prev_record": "6d38408d305afb2ae562d3c022c3421fc8819c81d61108d3a8b91e2b8dc7ca7c",
+    "sig": "Tg6C3jVdCgRXl-yjkFv8WYiAYBLqrawPvy-0YMxvdDBNJOLe__YtJk6VwXPtrQyoImmHoEKQUmdeepdK5P6MAQ",
+    "pow": {
+      "nonce": "10e",
+      "bits": 8,
+      "digest": "00a22679469e3b308bd1d284853c81411f0d24f1f301b9964b461f58880a9d9d"
+    }
+  },
+  "name_over_cap": {
+    "cap": 3,
+    "code": "FED-MESH-NAME-CAP",
+    "record": {
+      "v": "FED-MESH-1.0",
+      "kind": "name",
+      "handle": "#CPV0CWYPXP4",
+      "public_key": "ebVWLo_mVPlAeLES6KmLp5AfhTrmlb7X4OORC60ElmQ",
+      "name": "name-4.aziel",
+      "owner": "#CPV0CWYPXP4",
+      "target": {
+        "type": "hash",
+        "value": "f56487a629550848508cbd6305d814f6008a1705ab4e215d926f6fda5e9c94dc"
+      },
+      "expires": null,
+      "seq": 5,
+      "prev": "4ab885ab54ae5c5a26fbb40d9926ca79c35f6378ae997d73901655353bb46576",
+      "prev_record": "0000000000000000000000000000000000000000000000000000000000000000",
+      "sig": "_QlyljRmoQCqqovzy5EcvlNeoVnVTCAQGjBAZA98ztfzepMgZ2zrfyocAvcJWhIuLZZKbBaF-Tg6jv85dT87BQ",
+      "pow": {
+        "nonce": "88",
+        "bits": 8,
+        "digest": "002dbf061dd18abda5b2b6dfd0a08a935c2e2ad4a5e40aaff2dafa51539bc6fa"
+      }
+    }
+  },
+  "name_pow_bits": 8,
+  "name_pending_ms": 259200000,
+  "witness_k": 2,
+  "equivocation": {
+    "left": {
+      "v": "FED-MESH-1.0",
+      "kind": "ref",
+      "handle": "#CPV0CWYPXP4",
+      "public_key": "ebVWLo_mVPlAeLES6KmLp5AfhTrmlb7X4OORC60ElmQ",
+      "ref": "heads/main",
+      "object_hash": "f56487a629550848508cbd6305d814f6008a1705ab4e215d926f6fda5e9c94dc",
+      "prev_ref": "0000000000000000000000000000000000000000000000000000000000000000",
+      "seq": 4,
+      "prev": "2222222222222222222222222222222222222222222222222222222222222222",
+      "sig": "OnkMvld5JofooG8askpJCNHioSqIbvLJmhsS8CcH1oT0z5YCB1DKwTpPVCDBfqX-qJeFM3wynii0vWTqwvhVAg"
+    },
+    "right": {
+      "v": "FED-MESH-1.0",
+      "kind": "ref",
+      "handle": "#CPV0CWYPXP4",
+      "public_key": "ebVWLo_mVPlAeLES6KmLp5AfhTrmlb7X4OORC60ElmQ",
+      "ref": "heads/main",
+      "object_hash": "abababababababababababababababababababababababababababababababab",
+      "prev_ref": "0000000000000000000000000000000000000000000000000000000000000000",
+      "seq": 4,
+      "prev": "2222222222222222222222222222222222222222222222222222222222222222",
+      "sig": "hL_VghAjdp0jR2GizzNxXQwH8NCjRpk9hnNJIMeKWAnIDb8UJdt9wFEzrjpRMmmSSV07lt3vyQjQswdydfB-CQ"
+    },
+    "left_hash": "53cd930e757a6fe087bf8ee1b6cfe2415fae2fd5f6c5d87c26bae805a310bad6",
+    "right_hash": "c83e7f185266b196802c23ece6bc3a138c24016e86d52a4c26cc948460c64d93",
+    "code": "FED-MESH-OK",
+    "network_cutoff": false
+  },
+  "airgap_bundle": {
+    "v": "FED-MESH-1.0",
+    "kind": "airgap-bundle",
+    "handle": "#CPV0CWYPXP4",
+    "public_key": "ebVWLo_mVPlAeLES6KmLp5AfhTrmlb7X4OORC60ElmQ",
+    "manifest": {
+      "files": [
+        {
+          "name": "objects/local-first",
+          "sha256": "f56487a629550848508cbd6305d814f6008a1705ab4e215d926f6fda5e9c94dc"
+        }
+      ]
+    },
+    "manifest_sha256": "8bb63ac4cfc5e9906781c09c7eb60e222c5cdd4fecd8d39c6c459b29fa9c2d1a",
+    "sig": "9bMxW9h4PihQzDE5AWWSN9k4UFsGnBIvqA7XYvCCeVKLIuHUXeidBBLJTWLvMd_0UEKynH-ALEFVIKLmVIOTDA"
+  },
+  "airgap_manifest_sha256": "8bb63ac4cfc5e9906781c09c7eb60e222c5cdd4fecd8d39c6c459b29fa9c2d1a",
+  "name_block": {
+    "code": "FED-MESH-NAME-BLOCK",
+    "reason": "NAME-BLOCK",
+    "evidence_hash": "c73c95876863dff6aa06f98e849e1b565a7f8eede5a9dbfc7ee6afa6a50742c9",
+    "content_stored": false,
+    "blocklist": "FED-MESH-BLOCKLIST-1",
+    "record": {
+      "v": "FED-MESH-1.0",
+      "kind": "name",
+      "handle": "#CPV0CWYPXP4",
+      "public_key": "ebVWLo_mVPlAeLES6KmLp5AfhTrmlb7X4OORC60ElmQ",
+      "name": "porn.aziel",
+      "owner": "#CPV0CWYPXP4",
+      "target": {
+        "type": "hash",
+        "value": "f56487a629550848508cbd6305d814f6008a1705ab4e215d926f6fda5e9c94dc"
+      },
+      "expires": null,
+      "seq": 2,
+      "prev": "11a622e89de2b80c48ffee9a6f9efe13e857e6643e539617c9dd481c0b36904d",
+      "prev_record": "0000000000000000000000000000000000000000000000000000000000000000",
+      "sig": "ro20II1C29PMvcoy-3HpcwOAOqJqGGfLHA-2z9HSGP42MB-QN_-3SWIqbsOQzpZ_KZ0g92msKOz1S1hC1oUpAw",
+      "pow": {
+        "nonce": "84",
+        "bits": 8,
+        "digest": "00ec35d9298380d3499c89b0d6709e85f1803eb66f714cc0c222bcfc3deab58e"
+      }
+    }
+  },
+  "isolation": {
+    "code": "FED-MESH-OK",
+    "reason": "NUDITY",
+    "content_stored": false,
+    "statement_hash": "19368601e687ba923a76811770d65fb0d2af0c1f14953a94869a1dd9a5d67493",
+    "record": {
+      "v": "FED-MESH-1.0",
+      "kind": "isolation",
+      "handle": "#4S11EZW09MD",
+      "public_key": "uvxxvq06xeS2PpyCFu5xo0quxlci7tvKcotOmzzM45Y",
+      "subject": "#4S11EZW09MD",
+      "reason": "NUDITY",
+      "check": "image-nudity",
+      "model": "absent",
+      "evidence_hash": "f56487a629550848508cbd6305d814f6008a1705ab4e215d926f6fda5e9c94dc",
+      "seq": 2,
+      "prev": "44128acab4947759e6e581661e6e8f056a938ab6639bb1afbbc8e6dbeb7b8904",
+      "sig": "jqZRZDoElZHknWdIGzR7x9X138tL91sJZzbhWLnImLij24-eFjKzdtxIo4rXgDaBf247-NBC7oYy8mwBMeXgDw"
+    }
+  },
+  "appeal": {
+    "applied": false,
+    "isolation_remains": true,
+    "statement_hash": "762a17b6a1e209ddcb6ef0740eede2d89e892217964ae372dcc5628a3b8ddcd8",
+    "record": {
+      "v": "FED-MESH-1.0",
+      "kind": "appeal",
+      "handle": "#4S11EZW09MD",
+      "public_key": "uvxxvq06xeS2PpyCFu5xo0quxlci7tvKcotOmzzM45Y",
+      "isolation_hash": "19368601e687ba923a76811770d65fb0d2af0c1f14953a94869a1dd9a5d67493",
+      "note": "request a re-check",
+      "seq": 3,
+      "prev": "19368601e687ba923a76811770d65fb0d2af0c1f14953a94869a1dd9a5d67493",
+      "sig": "q8Mebxw1F_4ulhPCr_8D5mPR_fDADpSrpF7Xue1Qg_TqEVbSq_YV5nSJ0QbyVDHjx3nc72V9frXHAcFlTPYsDg"
+    }
+  },
+  "restore": {
+    "code": "FED-MESH-OK",
+    "slot": "ae",
+    "hub": "AZ.AzielEliab.AZ",
+    "object_hash": "f56487a629550848508cbd6305d814f6008a1705ab4e215d926f6fda5e9c94dc",
+    "verified": true,
+    "statement_hash": "2c88e4a8b4a1ce633abda1e92ce02b92eab783d02593c358db519a32f77f9f41",
+    "record": {
+      "v": "FED-MESH-1.0",
+      "kind": "restore",
+      "handle": "#CPV0CWYPXP4",
+      "public_key": "ebVWLo_mVPlAeLES6KmLp5AfhTrmlb7X4OORC60ElmQ",
+      "slot": "ae",
+      "hub": "AZ.AzielEliab.AZ",
+      "object_hash": "f56487a629550848508cbd6305d814f6008a1705ab4e215d926f6fda5e9c94dc",
+      "prev_slot": "0000000000000000000000000000000000000000000000000000000000000000",
+      "seq": 2,
+      "prev": "11a622e89de2b80c48ffee9a6f9efe13e857e6643e539617c9dd481c0b36904d",
+      "sig": "mBRhUmaRrrv6zEbp94i4tQALJ0CO9VOlnUtKr9yVh95sYT1hRv_5JBzhLjP0lpBSIWkqEs4O5t6bSOcOOsoFCg"
+    }
+  },
+  "slots": {
+    "user_slot_cap": 3,
+    "reserved_slot_cap": 4,
+    "reserved": [
+      {
+        "slot": "ae",
+        "hub": "AZ.AzielEliab.AZ",
+        "origin": "https://www.azieleliab.com/"
+      },
+      {
+        "slot": "corpus",
+        "hub": "AZ.AzielCorpusLibrary.AZ",
+        "origin": "https://www.azielcorpuslibrary.net/"
+      },
+      {
+        "slot": "godlock",
+        "hub": "AZ.Godlock.AZ",
+        "origin": "https://godlock.uk/"
+      },
+      {
+        "slot": "hdj",
+        "hub": "AZ.HeDidntJump.AZ",
+        "origin": "https://www.hedidntjump.com/"
+      }
+    ],
+    "blocklist_version": "FED-MESH-BLOCKLIST-1"
+  }
+}

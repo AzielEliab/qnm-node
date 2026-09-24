@@ -5,22 +5,26 @@ aziel-runtime ``docs/designs/FED-MESH-1.0.md`` when that spec lands.
 Until then the draft below is the daemon contract.
 
 Author: Aziel Eliab only. The software author is not a node handle.
-A participant handle is ``#`` plus 11 lowercase RFC 4648 base32
-characters from SHA-256 of the raw Ed25519 public key.
+A participant handle is ``#`` plus 11 Crockford base32 characters
+from the high 55 bits of SHA-256 of the raw Ed25519 public key.
+The runtime vector seed ``0102…1f20`` yields ``#CPV0CWYPXP4``.
 
-Open alignment points (runtime spec was not on main):
+Open alignment points:
 
-1. Version string ``FED-MESH-1.0-draft``.
-2. Handle length 11 and RFC 4648 base32 alphabet (lowercase, no padding).
+1. Refs, anchors, and most daemon objects stay ``FED-MESH-1.0-draft``.
+   Message envelopes and the runtime isolation record use ``FED-MESH-1.0``.
+2. Handle length 11, Crockford alphabet (no I, L, O, U), no padding.
 3. ``key_id`` = hex SHA-256 of the raw 32-byte Ed25519 public key.
 4. Canonical JSON: UTF-8, sorted keys, separators ``(',', ':')``.
 5. Ed25519 signature over the canonical object with ``sig`` removed.
-6. E2E is X25519 static-static, HKDF-SHA256, AES-256-GCM (12-byte
-   nonce). No XChaCha20-Poly1305 in this build. No forward secrecy.
-   AAD is the canonical routing tuple. Relays see ciphertext plus
-   routing metadata, not plaintext.
-7. HTTP paths are ``/v1/fedmesh/*``. ``/v1/mesh`` stays the route that
-   never enables radios.
+6. Message bodies use ephemeral X25519, HKDF-SHA256 salt
+   ``FED-MESH-1.0``, info ``FED-MESH-1.0|from|to|seq`` (not sorted),
+   AES-256-GCM, 12-byte nonce, no additional data. The recipient key
+   is that handle's static X25519 key. A later leak of the recipient
+   key opens old bodies; this process does not claim forward secrecy.
+7. Daemon send and direct stay ``/v1/fedmesh/*``. Isolation is posted
+   to ``/v1/mesh/relay/isolation``. ``GET /v1/mesh`` never enables
+   radios. ``GET /v1/mesh/relay`` is health and does not enable.
 8. Rollup bodies are signed plaintext hashes so a relay can hold them.
    They are not E2E. This daemon does not claim the runtime Worker
    has ChainLock- or TemporalLock-anchored them.
@@ -46,8 +50,22 @@ HANDLE_BODY_LEN = 11
 GENESIS_PREV = "0" * 64
 DEFAULT_RELAY = "https://aziel-runtime.vibelock.workers.dev"
 E2E_ALG = "x25519-hkdf-sha256-aes-256-gcm"
-HKDF_SALT = b"fedmesh-e2e"
-HKDF_INFO_PREFIX = VERSION.encode("ascii")
+MSG_VERSION = "FED-MESH-1.0"
+HKDF_SALT = b"FED-MESH-1.0"
+CROCKFORD = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
+MSG_FIELDS = (
+    "v",
+    "kind",
+    "handle",
+    "public_key",
+    "to",
+    "seq",
+    "prev",
+    "nonce",
+    "eph_public_key",
+    "ciphertext",
+    "via",
+)
 MAX_PEERS = 32
 MAX_RELAYS = 8
 MAX_ADDRS = 4
@@ -68,23 +86,8 @@ PROJECTION_KEYS = (
 )
 
 # What a relay or store-and-forward peer can read without the recipient key.
-RELAY_VISIBLE = (
-    "v",
-    "kind",
-    "purpose",
-    "from",
-    "to",
-    "key_id",
-    "sign_pub",
-    "box_pub",
-    "box_sig",
-    "seq",
-    "prev",
-    "utc",
-    "nonce",
-    "ct",
-    "sig",
-)
+# Matches the runtime ALLOWED.msg set. ``via`` is optional.
+RELAY_VISIBLE = MSG_FIELDS + ("sig",)
 
 
 def utc_now() -> str:
@@ -112,13 +115,51 @@ def b64d(text: str) -> bytes:
         raise QNMRefuse("FED-TAMPER", "bad base64") from exc
 
 
+def b64url(raw: bytes) -> str:
+    return base64.urlsafe_b64encode(raw).decode("ascii").rstrip("=")
+
+
+def decode_pub(text: str) -> bytes:
+    """32-byte key, standard base64 or unpadded base64url."""
+    raw = str(text or "").strip()
+    decoded = b64d(raw) if any(ch in raw for ch in "+/=") else b64url_d(raw)
+    if len(decoded) != 32:
+        raise QNMRefuse("FED-WRONG-KEY", "public key must be 32 bytes")
+    return decoded
+
+
+def b64url_d(text: str) -> bytes:
+    raw = str(text or "").strip()
+    if not raw or any(ch not in "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_" for ch in raw):
+        raise QNMRefuse("FED-TAMPER", "bad base64url")
+    pad = "=" * ((4 - len(raw) % 4) % 4)
+    try:
+        return base64.urlsafe_b64decode(raw + pad)
+    except Exception as exc:  # noqa: BLE001
+        raise QNMRefuse("FED-TAMPER", "bad base64url") from exc
+
+
 def handle_from_pubkey(raw_pub: bytes) -> str:
-    """``#`` + 11 lowercase base32 chars of SHA-256(pubkey). No registry."""
+    """``#`` + 11 Crockford symbols from SHA-256(pubkey). No registry.
+
+    Eleven symbols are 55 bits, taken from the high end of the digest.
+    The alphabet omits I, L, O, and U.
+    """
     if len(raw_pub) != 32:
         raise QNMRefuse("FED-WRONG-KEY", "Ed25519 public key must be 32 bytes")
     digest = hashlib.sha256(raw_pub).digest()
-    body = base64.b32encode(digest).decode("ascii").rstrip("=").lower()
-    return "#" + body[:HANDLE_BODY_LEN]
+    acc = 0
+    bits = 0
+    out: list[str] = []
+    for byte in digest:
+        acc = (acc << 8) | byte
+        bits += 8
+        while bits >= 5 and len(out) < HANDLE_BODY_LEN:
+            bits -= 5
+            out.append(CROCKFORD[(acc >> bits) & 31])
+    if len(out) != HANDLE_BODY_LEN:
+        raise QNMRefuse("FED-WRONG-KEY", "handle derivation was short")
+    return "#" + "".join(out)
 
 
 def key_id_from_pubkey(raw_pub: bytes) -> str:
@@ -284,27 +325,111 @@ def verify_anchor_crypto(anchor: dict[str, Any]) -> bytes:
     return raw
 
 
-def aad(from_handle: str, to_handle: str, seq: int, prev: str) -> bytes:
-    return canonical(
-        {
-            "v": VERSION,
-            "from": from_handle,
-            "to": to_handle,
-            "seq": int(seq),
-            "prev": str(prev),
-        }
-    )
+def message_info(from_handle: str, to_handle: str, seq: int) -> bytes:
+    """Runtime HKDF info. Directional: not sorted by handle."""
+    return f"{MSG_VERSION}|{from_handle}|{to_handle}|{int(seq)}".encode("utf-8")
 
 
-def derive_message_key(box_private: Any, peer_box_pub: bytes, left: str, right: str) -> bytes:
+def _message_key(shared: bytes, from_handle: str, to_handle: str, seq: int) -> bytes:
     from cryptography.hazmat.primitives import hashes
     from cryptography.hazmat.primitives.kdf.hkdf import HKDF
-    from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PublicKey
 
-    shared = box_private.exchange(X25519PublicKey.from_public_bytes(peer_box_pub))
-    lo, hi = sorted((left, right))
-    info = HKDF_INFO_PREFIX + b"|" + lo.encode("utf-8") + b"|" + hi.encode("utf-8")
-    return HKDF(algorithm=hashes.SHA256(), length=32, salt=HKDF_SALT, info=info).derive(shared)
+    return HKDF(
+        algorithm=hashes.SHA256(),
+        length=32,
+        salt=HKDF_SALT,
+        info=message_info(from_handle, to_handle, seq),
+    ).derive(shared)
+
+
+def message_statement(envelope: dict[str, Any]) -> dict[str, Any]:
+    """Signed message fields. Optional ``via`` is included only when present."""
+    out: dict[str, Any] = {}
+    for key in MSG_FIELDS:
+        if key in envelope and envelope[key] is not None:
+            out[key] = envelope[key]
+    return out
+
+
+def _signing_public_b64url(private_key: Any) -> str:
+    from cryptography.hazmat.primitives import serialization
+
+    raw = private_key.public_key().public_bytes(
+        serialization.Encoding.Raw,
+        serialization.PublicFormat.Raw,
+    )
+    return b64url(raw)
+
+
+def _verify_url(raw_pub: bytes, sig_text: str, data: bytes) -> None:
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
+
+    try:
+        Ed25519PublicKey.from_public_bytes(raw_pub).verify(b64url_d(sig_text), data)
+    except QNMRefuse:
+        raise
+    except Exception as exc:  # noqa: BLE001
+        raise QNMRefuse("FED-TAMPER", "signature does not match") from exc
+
+
+def seal_runtime_body(
+    *,
+    recipient_public: bytes,
+    from_handle: str,
+    to_handle: str,
+    seq: int,
+    plaintext: bytes,
+    ephemeral_private: Any = None,
+    nonce: bytes | None = None,
+) -> dict[str, str]:
+    """Seal raw bytes with the runtime message schedule. No plaintext returned."""
+    from cryptography.hazmat.primitives import serialization
+    from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey, X25519PublicKey
+    from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+
+    import os
+
+    if len(recipient_public) != 32:
+        raise QNMRefuse("FED-WRONG-KEY", "X25519 public key must be 32 bytes")
+    ephemeral = ephemeral_private if ephemeral_private is not None else X25519PrivateKey.generate()
+    shared = ephemeral.exchange(X25519PublicKey.from_public_bytes(recipient_public))
+    key = _message_key(shared, from_handle, to_handle, seq)
+    nonce_b = nonce if nonce is not None else os.urandom(12)
+    if len(nonce_b) != 12:
+        raise QNMRefuse("FED-TAMPER", "nonce must be 12 bytes")
+    ciphertext = AESGCM(key).encrypt(nonce_b, plaintext, None)
+    if len(ciphertext) > MAX_CT_BYTES:
+        raise QNMRefuse("FED-QUOTA", "ciphertext exceeds the relay cap")
+    public = ephemeral.public_key().public_bytes(serialization.Encoding.Raw, serialization.PublicFormat.Raw)
+    return {
+        "nonce": b64url(nonce_b),
+        "eph_public_key": b64url(public),
+        "ciphertext": b64url(ciphertext),
+    }
+
+
+def open_message_body(
+    box_private: Any,
+    *,
+    from_handle: str,
+    to_handle: str,
+    seq: int,
+    nonce: str,
+    eph_public_key: str,
+    ciphertext: str,
+) -> bytes:
+    """Open a runtime message body with the recipient's static X25519 key."""
+    from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PublicKey
+    from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+
+    try:
+        shared = box_private.exchange(X25519PublicKey.from_public_bytes(b64url_d(eph_public_key)))
+        key = _message_key(shared, from_handle, to_handle, seq)
+        return AESGCM(key).decrypt(b64url_d(nonce), b64url_d(ciphertext), None)
+    except QNMRefuse:
+        raise
+    except Exception as exc:  # noqa: BLE001
+        raise QNMRefuse("FED-E2E", "ciphertext failed authentication") from exc
 
 
 def seal_envelope(
@@ -318,82 +443,59 @@ def seal_envelope(
     purpose: str,
     plaintext: dict[str, Any],
     nonce: bytes | None = None,
+    ephemeral_private: Any = None,
 ) -> dict[str, Any]:
-    """Encrypt plaintext to the recipient and sign the routing envelope.
+    """Encrypt plaintext to the recipient and sign the runtime envelope.
 
-    ``purpose`` is ``msg`` or ``task`` and is visible to relays.
-    Plaintext is not.
+    ``purpose`` stays inside the ciphertext (note, file, object, or
+    task). Relays see the runtime message fields, not the purpose.
+    ``box_private`` is the sender's static key and is not the message key.
     """
+    del box_private
     verify_box_binding(recipient_card)
     verify_box_binding(sender)
     if purpose not in ("msg", "task"):
         raise QNMRefuse("FED-TAMPER", "purpose must be msg or task")
-    peer_box = b64d(str(recipient_card["box_pub"]))
-    key = derive_message_key(box_private, peer_box, str(sender["handle"]), str(recipient_card["handle"]))
-    from cryptography.hazmat.primitives.ciphers.aead import AESGCM
-
-    import os
-
-    nonce_b = nonce if nonce is not None else os.urandom(12)
-    ct = AESGCM(key).encrypt(
-        nonce_b,
-        canonical(plaintext),
-        aad(str(sender["handle"]), str(recipient_card["handle"]), seq, prev),
+    sealed = seal_runtime_body(
+        recipient_public=decode_pub(str(recipient_card["box_pub"])),
+        from_handle=str(sender["handle"]),
+        to_handle=str(recipient_card["handle"]),
+        seq=int(seq),
+        plaintext=canonical(plaintext),
+        ephemeral_private=ephemeral_private,
+        nonce=nonce,
     )
-    if len(ct) > MAX_CT_BYTES:
-        raise QNMRefuse("FED-QUOTA", "ciphertext exceeds the relay cap")
     signed = {
-        "v": VERSION,
+        "v": MSG_VERSION,
         "kind": "msg",
-        "purpose": purpose,
-        "from": sender["handle"],
+        "handle": sender["handle"],
+        "public_key": _signing_public_b64url(private_key),
         "to": recipient_card["handle"],
-        "key_id": sender["key_id"],
-        "sign_pub": sender["sign_pub"],
-        "box_pub": sender["box_pub"],
-        "box_sig": sender["box_sig"],
         "seq": int(seq),
         "prev": str(prev),
-        "utc": utc_now(),
-        "nonce": b64e(nonce_b),
-        "ct": b64e(ct),
+        "nonce": sealed["nonce"],
+        "eph_public_key": sealed["eph_public_key"],
+        "ciphertext": sealed["ciphertext"],
     }
     envelope = dict(signed)
-    envelope["sig"] = _sign(private_key, canonical(signed))
+    envelope["sig"] = b64url(private_key.sign(canonical(signed)))
     return envelope
 
 
 def open_envelope(box_private: Any, my_card: dict[str, Any], envelope: dict[str, Any]) -> dict[str, Any]:
     """Verify the sender and decrypt. Raises FED-TAMPER / FED-WRONG-KEY / FED-E2E."""
     verify_envelope(envelope)
-    sender_card = {
-        "v": VERSION,
-        "author": AUTHOR,
-        "handle": envelope["from"],
-        "key_id": envelope["key_id"],
-        "sign_pub": envelope["sign_pub"],
-        "box_pub": envelope["box_pub"],
-        "box_sig": envelope["box_sig"],
-    }
-    verify_box_binding(sender_card)
     if envelope["to"] != my_card["handle"]:
         raise QNMRefuse("FED-TAMPER", "envelope is not addressed to this handle")
-    key = derive_message_key(
+    raw = open_message_body(
         box_private,
-        b64d(str(envelope["box_pub"])),
-        str(envelope["from"]),
-        str(envelope["to"]),
+        from_handle=str(envelope["handle"]),
+        to_handle=str(envelope["to"]),
+        seq=int(envelope["seq"]),
+        nonce=str(envelope["nonce"]),
+        eph_public_key=str(envelope["eph_public_key"]),
+        ciphertext=str(envelope["ciphertext"]),
     )
-    from cryptography.hazmat.primitives.ciphers.aead import AESGCM
-
-    try:
-        raw = AESGCM(key).decrypt(
-            b64d(str(envelope["nonce"])),
-            b64d(str(envelope["ct"])),
-            aad(str(envelope["from"]), str(envelope["to"]), int(envelope["seq"]), str(envelope["prev"])),
-        )
-    except Exception as exc:  # noqa: BLE001
-        raise QNMRefuse("FED-E2E", "ciphertext failed authentication") from exc
     try:
         inner = json.loads(raw.decode("utf-8"))
     except Exception as exc:  # noqa: BLE001
@@ -405,23 +507,27 @@ def open_envelope(box_private: Any, my_card: dict[str, Any], envelope: dict[str,
 
 def verify_envelope(envelope: dict[str, Any]) -> None:
     """Relay-side check: signature, handle, size. Does not decrypt."""
-    raw = b64d(str(envelope.get("sign_pub") or ""))
-    assert_handle_matches(str(envelope.get("from") or ""), raw, str(envelope.get("key_id") or ""))
-    signed = {key: envelope.get(key) for key in RELAY_VISIBLE if key != "sig"}
-    if signed.get("v") != VERSION or signed.get("kind") != "msg":
+    extra = [key for key in envelope if key not in RELAY_VISIBLE]
+    if extra:
+        raise QNMRefuse("FED-TAMPER", "envelope field refused")
+    raw = b64url_d(str(envelope.get("public_key") or ""))
+    if len(raw) != 32:
+        raise QNMRefuse("FED-WRONG-KEY", "message public key is not 32 bytes")
+    if handle_from_pubkey(raw) != str(envelope.get("handle") or ""):
+        raise QNMRefuse("FED-WRONG-KEY", "message handle does not match the key")
+    signed = message_statement(envelope)
+    if signed.get("v") != MSG_VERSION or signed.get("kind") != "msg":
         raise QNMRefuse("FED-TAMPER", "envelope version or kind mismatch")
-    if signed.get("purpose") not in ("msg", "task"):
-        raise QNMRefuse("FED-TAMPER", "envelope purpose mismatch")
-    ct = b64d(str(signed.get("ct") or ""))
+    ct = b64url_d(str(signed.get("ciphertext") or ""))
     if len(ct) > MAX_CT_BYTES or len(ct) < 16:
         raise QNMRefuse("FED-TAMPER", "ciphertext size refused")
-    expect_canonical = canonical(signed)
-    _verify(raw, str(envelope.get("sig") or ""), expect_canonical)
+    if len(b64url_d(str(signed.get("nonce") or ""))) != 12:
+        raise QNMRefuse("FED-TAMPER", "nonce must be 12 bytes")
+    _verify_url(raw, str(envelope.get("sig") or ""), canonical(signed))
 
 
 def envelope_id(envelope: dict[str, Any]) -> str:
-    signed = {key: envelope.get(key) for key in RELAY_VISIBLE if key != "sig"}
-    return sha256_hex(canonical(signed))
+    return sha256_hex(canonical(message_statement(envelope)))
 
 
 def verify_committed_inner(inner: dict[str, Any]) -> None:

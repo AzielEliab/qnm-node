@@ -250,7 +250,7 @@ def test_child_image_is_not_kept(tmp_path: Path) -> None:
         if path.is_file():
             tree += path.read_bytes().decode("utf-8", "replace")
     assert raw.decode("ascii") not in tree
-    assert node.fed.isolated_local[node.fed.owner.handle]["reason"] == "ETHICS-CHILD-IMAGE"
+    assert node.fed.isolated_local[node.fed.owner.handle]["reason"] == "CHILD"
     appeal = node.fed.appeal(admin(node), "127.0.0.1")
     assert appeal["recheck"]["reason"] == "hash-only"
     assert appeal["lifted"] is False
@@ -273,12 +273,24 @@ def test_relay_honors_a_signed_isolation_record(tmp_path: Path) -> None:
         if row.get("kind") == "isolation":
             statement = row
     assert statement is not None
-    assert statement["content_stored"] is False
+    assert statement["reason"] == "HATE"
+    assert statement["check"] == "hate-text"
+    assert statement["model"] == "test-hate-0"
+    assert "content_stored" not in statement
+    assert "author" not in statement
+    assert home.fed.isolated_local[home.fed.owner.handle]["content_stored"] is False
+    assert home.fed.isolated_local[home.fed.owner.handle]["chainlock"] is False
     other = Node(tmp_path / "other")
     kept = other.fed.put_object(admin(other), b"other-node-bytes")
     other.fed.relay_on = True
-    accepted = other.fed.http_relay("POST", "/v1/fedmesh/isolation", "", json.dumps(statement).encode("utf-8"))
+    code, accepted = other.handle(
+        "POST",
+        "/v1/mesh/relay/isolation",
+        json.dumps(statement).encode("utf-8"),
+    )
+    assert code == 200
     assert accepted["network_wide"] is False
+    assert accepted["chainlock_upstream"] is False
     with pytest.raises(QNMRefuse) as blocked:
         other.fed.http_relay(
             "POST",
@@ -342,3 +354,46 @@ def test_reserved_mirror_restore_checks_the_hash(tmp_path: Path) -> None:
     with pytest.raises(QNMRefuse) as wrong_key:
         node.fed.mirrors.restore(foreign, {"index.html": body})
     assert wrong_key.value.code == "FED-WRONG-KEY"
+
+
+def test_isolation_is_posted_before_island_drops_relays(tmp_path: Path) -> None:
+    home = Node(tmp_path / "home")
+    relay = Node(tmp_path / "relay")
+    arm_clear(home)
+    unlock(home)
+    relay.fed.relay_on = True
+    seen: list[tuple[str, str, list[str]]] = []
+
+    def transport(method: str, url: str, payload: dict) -> dict:
+        seen.append((method, url, list(home.fed.relay_urls)))
+        path = url.split("http://relay", 1)[1]
+        return relay.fed.http_relay(method, path, "", json.dumps(payload).encode("utf-8"))
+
+    home.fed.transport = transport
+    home.fed.set_relays(["http://relay"])
+    home.fed.design_put(
+        admin(home),
+        {"slot": 0, "label": "notes.aziel", "template": "note", "theme": "night", "blocks": [{"type": "text", "text": "REFUSE-HATE"}]},
+        "127.0.0.1",
+    )
+    with pytest.raises(QNMRefuse) as refused:
+        home.fed.design_publish(admin(home), 0, "127.0.0.1", override=True)
+    assert refused.value.code == "FED-ETHICS"
+    assert seen == [("POST", "http://relay/v1/mesh/relay/isolation", ["http://relay"])]
+    assert home.fed.relay_urls == []
+    assert home.fed.island is True
+    assert home.fed.owner.handle in relay.fed.isolated_seen
+    kinds = [row["kind"] for row in home.receipts()]
+    assert kinds.index("fedmesh_isolation") < kinds.index("fedmesh_island")
+    anchored = next(row for row in home.receipts() if row["kind"] == "fedmesh_isolation")
+    assert anchored["identity_anchor"]["handle"] == home.fed.owner.handle
+    assert anchored["identity_anchor"]["receipt_hash"] == anchored["receipt_hash"]
+    assert home.fed.public_status()["chainlock_upstream"] is False
+    assert relay.fed.public_status()["chainlock_upstream"] is False
+    code, health = relay.handle("GET", "/v1/mesh/relay")
+    assert code == 200
+    assert health["enabled_by_get"] is False
+    assert relay.fed.relay_on is True
+    code, mesh = home.handle("GET", "/v1/mesh")
+    assert code == 403
+    assert mesh["code"] == "QNM-MESH-NEVER-ENABLES"

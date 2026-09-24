@@ -9,41 +9,46 @@ unpadded base64url, matching the runtime codec. Wave 3 records
 (isolation, appeal, mirror-restore, design-unlock) use the same
 shape. That paper does not define them yet.
 
-The hop key schedule does not put the origin handle in HKDF info.
-The runtime message cipher does (`FED-MESH-1.0|from|to|seq`), which
-cannot hide the origin from a relay that must decrypt. Hop and blind
-layers use `FED-MESH-1.0|hop|exit|seq` and `FED-MESH-1.0|blind|to|seq`.
+Message bodies use the runtime schedule in ``wire.py``
+(``FED-MESH-1.0|from|to|seq``). Hop and blind layers stay separate:
+``FED-MESH-1.0|hop|exit|seq`` and ``FED-MESH-1.0|blind|to|seq``, so a
+decrypting exit does not learn the origin.
 
 Author: Aziel Eliab only.
 """
 
 from __future__ import annotations
 
-import base64
 import os
+import re
 from typing import Any
 
 from qnm.boot import AUTHOR, QNMRefuse
-from qnm.fedmesh.wire import canonical, handle_from_pubkey
+from qnm.fedmesh.wire import b64url, b64url_d, canonical, handle_from_pubkey
 
 SEC_VERSION = "FED-MESH-1.0"
 HOP_PREFIX = b"FED-MESH-1.0|hop|"
 BLIND_PREFIX = b"FED-MESH-1.0|blind|"
 
 
-def b64url(raw: bytes) -> str:
-    return base64.urlsafe_b64encode(raw).decode("ascii").rstrip("=")
-
-
-def b64url_d(text: str) -> bytes:
-    raw = str(text or "").strip()
-    if not raw or any(ch not in "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_" for ch in raw):
-        raise QNMRefuse("FED-TAMPER", "bad base64url")
-    pad = "=" * ((4 - len(raw) % 4) % 4)
-    try:
-        return base64.urlsafe_b64decode(raw + pad)
-    except Exception as exc:  # noqa: BLE001
-        raise QNMRefuse("FED-TAMPER", "bad base64url") from exc
+ISOLATION_FIELDS = (
+    "v",
+    "kind",
+    "handle",
+    "public_key",
+    "subject",
+    "reason",
+    "check",
+    "model",
+    "evidence_hash",
+    "seq",
+    "prev",
+    "sig",
+)
+ISOLATION_REASONS = frozenset({"NUDITY", "CHILD", "HATE", "CSAM"})
+CHECK_RE = re.compile(r"^[a-z0-9][a-z0-9._-]{0,63}$")
+MODEL_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._+-]{0,63}$")
+ANCHOR_FIELDS = ("v", "handle", "public_key", "seq", "prev", "receipt_hash", "sig")
 
 
 def sign_statement(private_key: Any, body: dict[str, Any]) -> dict[str, Any]:
@@ -195,6 +200,129 @@ def local_statement(private_key: Any, *, handle: str, kind: str, fields: dict[st
     if _has_key(body, "score"):
         raise QNMRefuse("FED-POLICY", "local trust has no score field")
     return sign_statement(private_key, body)
+
+
+def isolation_statement(document: dict[str, Any]) -> dict[str, Any]:
+    """Runtime isolation statement. No author, content, or lock flags."""
+    return {
+        "v": document.get("v"),
+        "kind": "isolation",
+        "handle": document.get("handle"),
+        "public_key": document.get("public_key"),
+        "subject": document.get("subject"),
+        "reason": document.get("reason"),
+        "check": document.get("check"),
+        "model": document.get("model"),
+        "evidence_hash": document.get("evidence_hash"),
+        "seq": document.get("seq"),
+        "prev": document.get("prev"),
+    }
+
+
+def verify_isolation_statement(document: dict[str, Any]) -> bytes:
+    """Accept the runtime isolation field set and its signature."""
+    if set(document) != set(ISOLATION_FIELDS):
+        raise QNMRefuse("FED-TAMPER", "isolation record fields refused")
+    if document.get("v") != SEC_VERSION or document.get("kind") != "isolation":
+        raise QNMRefuse("FED-TAMPER", "isolation statement header refused")
+    if document.get("subject") != document.get("handle"):
+        raise QNMRefuse("FED-POLICY", "only the handle can sign its own isolation")
+    if document.get("reason") not in ISOLATION_REASONS:
+        raise QNMRefuse("FED-TAMPER", "isolation reason refused")
+    if not CHECK_RE.fullmatch(str(document.get("check") or "")):
+        raise QNMRefuse("FED-TAMPER", "isolation check refused")
+    if not MODEL_RE.fullmatch(str(document.get("model") or "")):
+        raise QNMRefuse("FED-TAMPER", "isolation model refused")
+    evidence = str(document.get("evidence_hash") or "")
+    if len(evidence) != 64 or any(ch not in "0123456789abcdef" for ch in evidence):
+        raise QNMRefuse("FED-TAMPER", "isolation evidence hash refused")
+    seq = document.get("seq")
+    if isinstance(seq, bool) or not isinstance(seq, int) or seq < 1:
+        raise QNMRefuse("FED-TAMPER", "isolation sequence refused")
+    prev = str(document.get("prev") or "")
+    if len(prev) != 64 or any(ch not in "0123456789abcdef" for ch in prev):
+        raise QNMRefuse("FED-TAMPER", "isolation prev refused")
+    raw = b64url_d(str(document.get("public_key") or ""))
+    if len(raw) != 32:
+        raise QNMRefuse("FED-WRONG-KEY", "isolation key is not 32 bytes")
+    if handle_from_pubkey(raw) != str(document.get("handle") or ""):
+        raise QNMRefuse("FED-WRONG-KEY", "isolation handle does not match the key")
+    statement = isolation_statement(document)
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
+
+    try:
+        Ed25519PublicKey.from_public_bytes(raw).verify(
+            b64url_d(str(document.get("sig") or "")),
+            canonical(statement),
+        )
+    except QNMRefuse:
+        raise
+    except Exception as exc:  # noqa: BLE001
+        raise QNMRefuse("FED-TAMPER", "isolation signature refused") from exc
+    return raw
+
+
+def identity_anchor_statement(anchor: dict[str, Any]) -> dict[str, Any]:
+    """ACT-RECEIPT-1.1 anchor body. ``public_key`` is the key; no key_id inside."""
+    return {
+        "v": SEC_VERSION,
+        "handle": anchor.get("handle"),
+        "public_key": anchor.get("public_key"),
+        "seq": anchor.get("seq"),
+        "prev": anchor.get("prev"),
+        "receipt_hash": anchor.get("receipt_hash"),
+    }
+
+
+def make_identity_anchor(
+    private_key: Any,
+    *,
+    handle: str,
+    seq: int,
+    prev: str,
+    receipt_hash: str,
+) -> dict[str, Any]:
+    """Sign a receipt hash. This is not a ChainLock acknowledgement."""
+    body = identity_anchor_statement(
+        {
+            "handle": handle,
+            "public_key": signing_public_b64url(private_key),
+            "seq": int(seq),
+            "prev": str(prev),
+            "receipt_hash": str(receipt_hash),
+        }
+    )
+    return sign_statement(private_key, body)
+
+
+def verify_identity_anchor(anchor: dict[str, Any]) -> bytes:
+    if set(anchor) != set(ANCHOR_FIELDS):
+        raise QNMRefuse("FED-TAMPER", "identity anchor fields refused")
+    if anchor.get("v") != SEC_VERSION:
+        raise QNMRefuse("FED-TAMPER", "identity anchor version refused")
+    receipt_hash = str(anchor.get("receipt_hash") or "")
+    prev = str(anchor.get("prev") or "")
+    for value in (receipt_hash, prev):
+        if len(value) != 64 or any(ch not in "0123456789abcdef" for ch in value):
+            raise QNMRefuse("FED-TAMPER", "identity anchor hash refused")
+    seq = anchor.get("seq")
+    if isinstance(seq, bool) or not isinstance(seq, int) or seq < 1:
+        raise QNMRefuse("FED-TAMPER", "identity anchor sequence refused")
+    raw = b64url_d(str(anchor.get("public_key") or ""))
+    if len(raw) != 32 or handle_from_pubkey(raw) != str(anchor.get("handle") or ""):
+        raise QNMRefuse("FED-WRONG-KEY", "identity anchor handle does not match the key")
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
+
+    try:
+        Ed25519PublicKey.from_public_bytes(raw).verify(
+            b64url_d(str(anchor.get("sig") or "")),
+            canonical(identity_anchor_statement(anchor)),
+        )
+    except QNMRefuse:
+        raise
+    except Exception as exc:  # noqa: BLE001
+        raise QNMRefuse("FED-TAMPER", "identity anchor signature refused") from exc
+    return raw
 
 
 def _has_key(value: object, key: str) -> bool:

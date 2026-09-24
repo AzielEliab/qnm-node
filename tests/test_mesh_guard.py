@@ -358,7 +358,7 @@ def test_tor_adapter_uses_proxy_and_does_not_fall_back(tmp_path: Path) -> None:
         spool = (relay.root / "data" / "fedmesh" / "spool").read_text(encoding="utf-8") if False else ""
         spool = "".join(path.read_text(encoding="utf-8") for path in (relay.root / "data" / "fedmesh" / "spool").glob("*.jsonl"))
         assert SECRET not in spool
-        assert "ct" in spool
+        assert "ciphertext" in spool
         sender.fed.tor.configure("127.0.0.1:1", enabled=True)
         with pytest.raises(QNMRefuse) as missing:
             sender.fed.send_message(admin(sender), peer.fed.owner.handle, SECRET, share=True)

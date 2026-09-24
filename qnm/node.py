@@ -48,7 +48,7 @@ from qnm.archive import ChainArchive
 from qnm.chain import Chain
 from qnm.bitmesh import Bitmesh, refuse_public_geo
 from qnm.coldcopy import DEVICE_CLASSES, ColdCopy
-from qnm.fabric import CLAIM_CLOCK, FABRIC_SPEC, Fabric, mesh_never_enables
+from qnm.fabric import CLAIM_CLOCK, FABRIC_SPEC, Fabric, mesh_never_enables, mesh_relay_route
 from qnm.planes import Planes
 from qnm.surface import SECURITY_HEADERS, refuse_wan_bind, require_operator_token, token_from_headers
 from qnsd.vias import radios_stamp
@@ -258,6 +258,16 @@ class Node:
         receipt["mesh"] = mesh
         refuse_public_geo(receipt)
         receipt["receipt_hash"] = receipt_digest(receipt)
+        ident = signer if signer is not None else self.fed.owner
+        from qnm.fedmesh.secwire import make_identity_anchor
+
+        receipt["identity_anchor"] = make_identity_anchor(
+            ident.sign_private,
+            handle=ident.handle,
+            seq=int(mesh["seq"]),
+            prev=str(mesh["prev"]),
+            receipt_hash=receipt["receipt_hash"],
+        )
         with self._receipt_log.open("a", encoding="utf-8") as fh:
             fh.write(json.dumps(receipt, sort_keys=True, separators=(",", ":")) + "\n")
             fh.flush()
@@ -1358,16 +1368,16 @@ class Node:
     ) -> tuple[int, dict[str, Any]]:
         parsed = urlparse(path)
         route = parsed.path.rstrip("/") or "/"
+        if mesh_relay_route(path) or route.startswith("/v1/fedmesh"):
+            try:
+                return 200, self.fed.http_relay(method.upper(), route, parsed.query, body)
+            except QNMRefuse as exc:
+                return 403, exc.as_dict()
         if mesh_never_enables(path):
             return 403, QNMRefuse(
                 "QNM-MESH-NEVER-ENABLES",
                 "GET /v1/mesh never enables radios",
             ).as_dict()
-        if route.startswith("/v1/fedmesh"):
-            try:
-                return 200, self.fed.http_relay(method.upper(), route, parsed.query, body)
-            except QNMRefuse as exc:
-                return 403, exc.as_dict()
         if actor is not None:
             try:
                 from qnm.fedmesh.access import authorize

@@ -95,11 +95,10 @@ class Outbound:
         if raw:
             raise QNMRefuse("FED-POLICY", "raw field stays on the node")
         kind = str(payload.get("kind") or "")
-        purpose = str(payload.get("purpose") or "")
-        if kind == "msg" or purpose in ("msg", "task"):
+        if kind == "msg":
             if not share:
                 raise QNMRefuse("FED-POLICY", "raw data leaves only as an explicit encrypted share")
-            if "ct" not in payload:
+            if "ciphertext" not in payload:
                 raise QNMRefuse("FED-POLICY", "a share leaves only as ciphertext")
             return payload
         if kind in LIGHT_KINDS or payload.get("purpose") == "box-bind" or "sign_pub" in payload:

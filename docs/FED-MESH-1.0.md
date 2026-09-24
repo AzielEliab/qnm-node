@@ -30,19 +30,22 @@ digest, a fetch request, or a similar light record. Raw fields
 or task leaves only when the caller sets `share` and the body is
 already ciphertext.
 
-A share is end-to-end between handles: X25519 static-static, HKDF-SHA256
-(salt `fedmesh-e2e`), AES-256-GCM with a 12-byte nonce. There is no
-forward secrecy and no XChaCha20-Poly1305. Relays see routing metadata
-only: version, kind `msg`, purpose `msg` or `task`, from, to, key id,
-signing public key, box public key, box binding signature, sequence,
-previous hash, time, nonce, ciphertext, envelope signature. The inner
-kind (note, file, object, task) sits inside the ciphertext.
+A share is end-to-end between handles: ephemeral X25519 to the
+recipient's static X25519 key, HKDF-SHA256 (salt `FED-MESH-1.0`, info
+`FED-MESH-1.0|from|to|seq`), AES-256-GCM with a 12-byte nonce and no
+additional data. A later leak of the recipient key opens old bodies.
+This process does not claim forward secrecy, and it has no
+XChaCha20-Poly1305. Relays see the runtime message fields: version
+`FED-MESH-1.0`, kind `msg`, handle, signing public key, to, sequence,
+previous hash, nonce, ephemeral public key, ciphertext, and the
+envelope signature. The inner kind (note, file, object, task) sits
+inside the ciphertext.
 
 Author identity remains **Aziel Eliab**. The handle is the participant.
 
 ## Handle
 
-`#` plus 11 lowercase RFC 4648 base32 characters (no padding) of
+`#` plus 11 Crockford base32 characters (no I, L, O, or U, no padding) of
 SHA-256 of the raw 32-byte Ed25519 public key. `key_id` is the hex
 SHA-256 of that same public key. Anyone can recompute the handle from
 the public key. There is no central registry.
@@ -117,6 +120,15 @@ then stored by a relay. The relay records `temporal_lock: false` and
 ChainLock or TemporalLock sealed it. `temporal.applied` is true only
 when an importable TemporalLock engine returns a stamp. None is
 imported here, so the stamp is local UTC and `applied` is false.
+
+Each new receipt also carries an `identity_anchor` in the
+ACT-RECEIPT-1.1 shape: `v`, `handle`, `public_key`, `seq`, `prev`,
+`receipt_hash`, and `sig`. It is attached after `receipt_hash` is
+computed and is excluded from that hash, so older receipts still
+verify. `public_key` is the signing key. The hex `key_id` stays on the
+mesh anchor; the runtime anchor statement does not include `key_id`.
+This signature is local. `chainlock_upstream` stays false. The anchor
+does not claim the runtime four-field ACT-RECEIPT-1.0 hash.
 
 LAN discovery is opt-in UDP (`lan_on`), magic `QNM1`, default bind
 127.0.0.1. It is not mDNS. Broadcast to 255.255.255.255 is a separate
@@ -286,8 +298,9 @@ A draft is templates, an ordered block list (text, image, link,
 gallery, embed of a local app), and a theme: night, day, or aziel.
 Preview HTML is generated here. It does not paint image bytes and it
 does not fetch links. Block order is the edit model. The self-certifying
-`<handle>.aziel` name is not one of the three slots. This daemon's
-handle alphabet is still the draft lowercase base32, not Crockford.
+`<handle>.aziel` name is not one of the three slots. The handle body
+is Crockford base32. The runtime vector seed `0102…1f20` yields
+`#CPV0CWYPXP4`.
 
 Publish checks ethics before any ref is signed. The required checks are
 nudity/sexual images, images of children, and hate text. They run in a
@@ -297,10 +310,14 @@ is `FED-ETHICS-ABSENT`. That is fail closed. Absence does not isolate
 the handle. A test double is not a detector. Classifiers miss things
 and they false-positive. This does not catch everything.
 
-A refusal writes an isolation statement: reason code, evidence hash,
-`content_stored: false`, `chainlock: false`, `temporal_lock: false`.
-The content is not in the statement. The handle's node enters island
-mode and stops relaying. Local keys and drafts stay. `leave_island` is
+A refusal writes an isolation record in the runtime field set:
+`reason` (`NUDITY`, `CHILD`, `HATE`, or `CSAM`), `check`, `model`,
+`evidence_hash`, and the signature fields. `author`, `content_stored`,
+`chainlock`, and `temporal_lock` are not in that signed record. Local
+metadata still records `content_stored: false` and `chainlock: false`.
+The record is anchored on the local receipt chain, posted to each
+configured relay at `/v1/mesh/relay/isolation`, and only then does the
+handle's node enter island mode. Local keys and drafts stay. `leave_island` is
 refused while that isolation stands. A child-image refusal deletes the
 staged bytes and keeps the hash. This program does not store or forward
 that image, and it does not file a report. Operators follow the law
@@ -328,13 +345,13 @@ The runtime spec was not on `main` when this draft was written. The
 wire format lives in `qnm/fedmesh/wire.py` so it can move later.
 Alignment points:
 
-1. Version string is `FED-MESH-1.0-draft` and may be renamed.
-2. Handle length is 11, RFC 4648 base32, lowercase, no padding.
+1. Refs, anchors, and most daemon objects stay `FED-MESH-1.0-draft`. Message envelopes and isolation records use `FED-MESH-1.0`.
+2. Handle length is 11 Crockford base32 characters. Seed `0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20` yields `#CPV0CWYPXP4`.
 3. `key_id` is hex SHA-256 of the raw 32-byte Ed25519 public key.
 4. Canonical JSON is UTF-8, sorted keys, separators `,` and `:`.
 5. Ed25519 signs the canonical object with `sig` removed.
-6. E2E is X25519 static-static, HKDF-SHA256 salt `fedmesh-e2e`, AES-256-GCM, 12-byte nonce. AAD is the canonical routing tuple. No forward secrecy.
-7. HTTP is under `/v1/fedmesh/*`, not `/v1/mesh`.
+6. Message E2E is ephemeral X25519, HKDF-SHA256 salt `FED-MESH-1.0`, info `FED-MESH-1.0|from|to|seq`, AES-256-GCM, 12-byte nonce, no additional data. The recipient key is static. This is not a forward-secrecy claim.
+7. Send, direct, refs, and fetch stay under `/v1/fedmesh/*`. Isolation is posted to `/v1/mesh/relay/isolation`. `GET /v1/mesh` never enables radios. `GET /v1/mesh/relay` is health and does not enable.
 8. Rollups are signed plaintext hashes, not ciphertext. This daemon records them as relay-stored. It does not claim ChainLock or TemporalLock.
 9. The default relay URL is the Worker origin. This daemon does not claim the Worker speaks this draft.
 10. Ref update fields: `v`, `kind=ref`, `author`, `handle`, `key_id`, `sign_pub`, `ref`, `object` (64 hex), `prev`, `seq`, `utc`, `hash`, `sig`.

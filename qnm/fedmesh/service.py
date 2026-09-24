@@ -53,7 +53,9 @@ from qnm.fedmesh.secwire import (
     hop_info,
     local_statement,
     open_layer,
+    sign_statement,
     signing_public_b64url,
+    verify_isolation_statement,
     verify_statement,
     wrap_two_hop,
 )
@@ -119,6 +121,21 @@ def _decode_files(value: object) -> dict[str, bytes]:
 
 
 _CONTENT_KEYS = frozenset({"text", "plaintext", "content", "content_b64", "image", "body", "image_b64"})
+_ISOLATION_FIELDS = {
+    "ETHICS-NUDITY": ("NUDITY", "image-nudity"),
+    "ETHICS-CHILD-IMAGE": ("CHILD", "image-child"),
+    "ETHICS-HATE": ("HATE", "hate-text"),
+    "nudity": ("NUDITY", "image-nudity"),
+    "child-image": ("CHILD", "image-child"),
+    "hate-text": ("HATE", "hate-text"),
+}
+
+
+def _isolation_fields(reason: str, model: str) -> tuple[str, str]:
+    mapped = _ISOLATION_FIELDS.get(reason) or _ISOLATION_FIELDS.get(model)
+    if mapped is None:
+        raise QNMRefuse("FED-ETHICS", reason or "isolation reason refused")
+    return mapped
 
 
 def _has_content_key(value: object) -> bool:
@@ -867,19 +884,20 @@ class FedService:
     def ingest(self, env: dict[str, Any]) -> dict[str, Any]:
         with self._lock:
             verify_envelope(env)
-            sender = str(env.get("from") or "")
+            sender = str(env.get("handle") or "")
             if sender in self.peers.quarantine:
                 raise QNMRefuse("FED-QUARANTINE", "this node has quarantined that handle")
-            self.peers.check(sender, len(str(env.get("ct") or "")))
+            self.peers.check(sender, len(str(env.get("ciphertext") or "")))
             ident_env = envelope_id(env)
             if ident_env in self.seen_envelopes:
                 raise QNMRefuse("FED-REPLAY", "envelope already ingested")
-            if env.get("purpose") == "task" and not self.edge_on:
-                raise QNMRefuse("FED-EDGE-OFF", "edge compute is off")
             if env.get("to") != self.owner.handle:
                 raise QNMRefuse("FED-TAMPER", "envelope is not for this node")
             inner = open_envelope(self.owner.box_private, self.owner.card, env)
-            if env.get("purpose") == "task":
+            plain_peek = inner.get("plaintext") if isinstance(inner.get("plaintext"), dict) else {}
+            if str(plain_peek.get("kind") or "") == "task" and not self.edge_on:
+                raise QNMRefuse("FED-EDGE-OFF", "edge compute is off")
+            if str(plain_peek.get("kind") or "") == "task":
                 self.seen_envelopes.add(ident_env)
                 return self._run_edge(env, inner)
             verify_committed_inner(inner)
@@ -908,11 +926,11 @@ class FedService:
                 self.airlock.land(raw, claimed=str(plain.get("object") or ""))
             self.seen_envelopes.add(ident_env)
             self.peers.heartbeats[sender] = self.peers.heartbeats.get(sender, 0) + 1
-            self.inbox.append({"from": env.get("from"), "kind": kind, "text": text, "id": ident_env})
+            self.inbox.append({"from": env.get("handle"), "kind": kind, "text": text, "id": ident_env})
             self._write_inbox()
             if self._writer is not None:
-                self._writer("fedmesh_delivery", {"msg_id": envelope_id(env), "from": env.get("from")})
-            return {"ok": True, "from": env.get("from"), "kind": kind, "text": text, "id": envelope_id(env)}
+                self._writer("fedmesh_delivery", {"msg_id": envelope_id(env), "from": env.get("handle")})
+            return {"ok": True, "from": env.get("handle"), "kind": kind, "text": text, "id": envelope_id(env)}
 
     def _run_edge(self, env: dict[str, Any], inner: dict[str, Any]) -> dict[str, Any]:
         plain = inner.get("plaintext") if isinstance(inner.get("plaintext"), dict) else {}
@@ -921,7 +939,7 @@ class FedService:
         self.sandbox_runs += 1
         result = run_job(job, cpu_seconds=quota.cpu_seconds, wall_seconds=quota.wall_seconds, memory_bytes=quota.memory_bytes)
         public = {
-            "for": env.get("from"),
+            "for": env.get("handle"),
             "ok": bool(result.get("ok")),
             "code": str(result.get("code") or ""),
             "result_hash": sha256_hex(canonical({"result": result.get("result")})),
@@ -930,7 +948,7 @@ class FedService:
         host_receipt = None
         if self._writer is not None:
             host_receipt = self._writer("fedmesh_edge_host", public)
-        return {"ok": True, "edge": True, "result": result, "host_receipt": host_receipt, "guest_anchor_for": env.get("from")}
+        return {"ok": True, "edge": True, "result": result, "host_receipt": host_receipt, "guest_anchor_for": env.get("handle")}
 
     def http_relay(self, method: str, path: str, query: str, body: bytes) -> dict[str, Any]:
         route = path.rstrip("/") or "/"
@@ -944,7 +962,7 @@ class FedService:
             if not isinstance(loaded, dict):
                 raise QNMRefuse("FED-TAMPER", "relay body is not an object")
             payload = loaded
-        if route.endswith("/health") and method == "GET":
+        if (route == "/v1/mesh/relay" or route.endswith("/health")) and method == "GET":
             return {
                 "ok": True,
                 "v": VERSION,
@@ -1045,7 +1063,7 @@ class FedService:
 
     def _accept_relay(self, env: dict[str, Any]) -> dict[str, Any]:
         verify_envelope(env)
-        key = (str(env.get("from") or ""), int(env.get("seq") or 0))
+        key = (str(env.get("handle") or ""), int(env.get("seq") or 0))
         ident = envelope_id(env)
         previous = self.relay_seen.get(key)
         if previous is not None:
@@ -1136,7 +1154,7 @@ class FedService:
             except QNMRefuse as exc:
                 _reraise_transport(exc)
                 continue
-            if "ct" not in res:
+            if "ciphertext" not in res:
                 continue
             inner = open_envelope(ident.box_private, ident.card, res)
             plain = inner.get("plaintext") if isinstance(inner.get("plaintext"), dict) else {}
@@ -1883,7 +1901,7 @@ class FedService:
             ident=ident,
         )
         recheck: dict[str, Any] = {"ran": False, "lifted": False}
-        if row.get("reason") == "ETHICS-CHILD-IMAGE":
+        if row.get("reason") == "CHILD":
             recheck["reason"] = "hash-only"
         elif self.ethics.status()["absent"]:
             recheck["reason"] = "model-absent"
@@ -1900,25 +1918,23 @@ class FedService:
         }
 
     def accept_isolation(self, statement: dict[str, Any]) -> dict[str, Any]:
-        verify_statement(statement)
-        if statement.get("kind") != "isolation":
-            raise QNMRefuse("FED-TAMPER", "isolation statement kind refused")
-        if statement.get("handle") != statement.get("subject"):
-            raise QNMRefuse("FED-POLICY", "only the handle can sign its own isolation")
-        if statement.get("content_stored") is not False:
-            raise QNMRefuse("FED-POLICY", "isolation records do not carry content")
+        verify_isolation_statement(statement)
         if _has_content_key(statement):
             raise QNMRefuse("FED-POLICY", "isolation records do not carry content")
-        evidence = str(statement.get("evidence") or "")
-        if len(evidence) != 64:
-            raise QNMRefuse("FED-TAMPER", "isolation evidence hash refused")
         self.isolated_seen[str(statement["subject"])] = {
             "reason": statement.get("reason"),
-            "evidence": evidence,
+            "evidence_hash": statement.get("evidence_hash"),
             "content_stored": False,
+            "chainlock": False,
         }
         self._save_book()
-        return {"ok": True, "subject": statement.get("subject"), "network_wide": False, "stored_content": False}
+        return {
+            "ok": True,
+            "subject": statement.get("subject"),
+            "network_wide": False,
+            "stored_content": False,
+            "chainlock_upstream": False,
+        }
 
     def _require_local(self, peer: str) -> None:
         host = str(peer or "").split("%", 1)[0].strip("[]")
@@ -1949,22 +1965,52 @@ class FedService:
                     kept.append(block)
             document["blocks"] = kept
             self.design.save(ident.handle, document)
-        statement = self._local_act(
-            "isolation",
+        runtime_reason, check = _isolation_fields(reason, str(verdict.get("model") or ""))
+        model = str(verdict.get("version") or "absent") or "absent"
+        evidence_hash = str(verdict.get("evidence") or "")
+        self.guard_seq += 1
+        statement = sign_statement(
+            ident.sign_private,
             {
+                "v": "FED-MESH-1.0",
+                "kind": "isolation",
+                "handle": ident.handle,
+                "public_key": signing_public_b64url(ident.sign_private),
                 "subject": ident.handle,
-                "reason": reason,
-                "evidence": verdict.get("evidence"),
-                "content_stored": False,
-                "chainlock": False,
-                "temporal_lock": False,
+                "reason": runtime_reason,
+                "check": check,
+                "model": model,
+                "evidence_hash": evidence_hash,
+                "seq": self.guard_seq,
+                "prev": self.guard_prev,
             },
-            ident=ident,
         )
+        verify_isolation_statement(statement)
         digest = sha256_hex(canonical({key: value for key, value in statement.items() if key != "sig"}))
+        self.guard_prev = digest
+        self._append_private(self.root / "data" / "fedmesh" / "local-statements.jsonl", statement)
+        if self._writer is not None:
+            self._writer(
+                "fedmesh_isolation",
+                {
+                    "statement_hash": digest,
+                    "reason": runtime_reason,
+                    "check": check,
+                    "model": model,
+                    "evidence_hash": evidence_hash,
+                    "chainlock_upstream": False,
+                },
+                signer=ident,
+            )
+        for url in list(self.relay_urls):
+            try:
+                self._post(url.rstrip("/") + "/v1/mesh/relay/isolation", statement, share=False)
+            except QNMRefuse as exc:
+                _reraise_transport(exc)
+                continue
         self.isolated_local[ident.handle] = {
-            "reason": reason,
-            "evidence": verdict.get("evidence"),
+            "reason": runtime_reason,
+            "evidence": evidence_hash,
             "statement_hash": digest,
             "content_stored": False,
             "chainlock": False,

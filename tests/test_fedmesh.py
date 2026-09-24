@@ -36,7 +36,7 @@ from qnm.fedmesh.wire import (
 )
 from qnm.node import LOCAL_PATHS, Node, main, serve
 
-HANDLE_RE = re.compile(r"^#[a-z2-7]{11}$")
+HANDLE_RE = re.compile(r"^#[0-9A-HJKMNP-TV-Z]{11}$")
 SECRET = "fedmesh-raw-secret-not-for-the-wire-9f3c"
 FILE_SECRET = "neighborhood-file-bytes-stay-local-until-shared-77ab"
 
@@ -110,6 +110,16 @@ def test_handle_matches_key_and_author_stays(tmp_path: Path) -> None:
     blob = json.dumps(node.snapshot())
     assert "sign_seed" not in blob
     assert "box_seed" not in blob
+    boot = node.receipts()[0]
+    from qnm.fedmesh.secwire import verify_identity_anchor
+    from qnm.nolie import receipt_digest
+
+    assert boot["receipt_hash"] == receipt_digest(boot)
+    verify_identity_anchor(boot["identity_anchor"])
+    assert boot["identity_anchor"]["receipt_hash"] == boot["receipt_hash"]
+    assert boot["identity_anchor"]["handle"] == node.fed.owner.handle
+    assert "key_id" not in boot["identity_anchor"]
+    assert node.fed.public_status()["chainlock_upstream"] is False
 
 
 def test_three_instances_do_not_share_keys(tmp_path: Path) -> None:
@@ -407,11 +417,11 @@ def test_messages_are_ciphertext_and_tamper_fails(tmp_path: Path) -> None:
         assert sent["e2e"] is True
         spool = tree_text(relay.root / "data" / "fedmesh" / "spool")
         assert SECRET not in spool
-        assert "ct" in spool
+        assert "ciphertext" in spool
         stolen = json.loads(
             next(path for path in (relay.root / "data" / "fedmesh" / "spool").glob("*.jsonl")).read_text().splitlines()[0]
         )["envelope"]
-        stolen["ct"] = ("A" if stolen["ct"][:1] != "A" else "B") + stolen["ct"][1:]
+        stolen["ciphertext"] = ("A" if stolen["ciphertext"][:1] != "A" else "B") + stolen["ciphertext"][1:]
         with pytest.raises(QNMRefuse) as tamper:
             peer.fed.ingest(stolen)
         assert tamper.value.code in ("FED-E2E", "FED-TAMPER")
@@ -657,6 +667,110 @@ def test_edge_compute_is_opt_in(tmp_path: Path) -> None:
         assert any(row["kind"] == "fedmesh_msg" for row in guest.receipts())
     finally:
         running.close()
+
+
+def test_runtime_fixture_handle_envelope_and_isolation() -> None:
+    """Daemon opens the runtime schedule and the published isolation vector."""
+    import base64
+
+    from cryptography.hazmat.primitives import hashes, serialization
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+    from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey, X25519PublicKey
+    from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+    from cryptography.hazmat.primitives.kdf.hkdf import HKDF
+
+    from qnm.fedmesh.secwire import verify_identity_anchor, verify_isolation_statement
+    from qnm.fedmesh.wire import (
+        MSG_VERSION,
+        b64url,
+        b64url_d,
+        canonical,
+        decode_pub,
+        handle_from_pubkey,
+        key_id_from_pubkey,
+        message_info,
+        open_envelope,
+        open_message_body,
+        seal_envelope,
+        seal_runtime_body,
+        sha256_hex,
+        sign_box_binding,
+    )
+
+    vectors = json.loads((Path(__file__).parent / "fixtures" / "fed-mesh-vectors.json").read_text(encoding="utf-8"))
+    sign_private = Ed25519PrivateKey.from_private_bytes(bytes.fromhex(vectors["seed_hex"]))
+    sign_raw = sign_private.public_key().public_bytes(serialization.Encoding.Raw, serialization.PublicFormat.Raw)
+    assert handle_from_pubkey(sign_raw) == "#CPV0CWYPXP4"
+    assert b64url(sign_raw) == vectors["public_key"]
+    enc_private = X25519PrivateKey.from_private_bytes(bytes.fromhex(vectors["enc_seed_hex"]))
+    enc_raw = enc_private.public_key().public_bytes(serialization.Encoding.Raw, serialization.PublicFormat.Raw)
+    assert b64url(enc_raw) == vectors["enc_public_key"]
+    verify_identity_anchor(vectors["identity_anchor"])
+    verify_isolation_statement(vectors["isolation"]["record"])
+    record = vectors["isolation"]["record"]
+    statement = {key: value for key, value in record.items() if key != "sig"}
+    assert sha256_hex(canonical(statement)) == vectors["isolation"]["statement_hash"]
+
+    sender = {
+        "v": "FED-MESH-1.0-draft",
+        "author": AUTHOR,
+        "handle": vectors["handle"],
+        "key_id": key_id_from_pubkey(sign_raw),
+        "sign_pub": base64.b64encode(sign_raw).decode("ascii"),
+        "box_pub": base64.b64encode(enc_raw).decode("ascii"),
+    }
+    sender["box_sig"] = sign_box_binding(
+        sign_private, sender["handle"], sender["key_id"], sender["sign_pub"], sender["box_pub"]
+    )
+    body = b"cross-vector"
+    eph = X25519PrivateKey.generate()
+    nonce = b"\x01" * 12
+    sealed = seal_runtime_body(
+        recipient_public=decode_pub(vectors["enc_public_key"]),
+        from_handle=vectors["handle"],
+        to_handle="#4S11EZW09MD",
+        seq=2,
+        plaintext=body,
+        ephemeral_private=eph,
+        nonce=nonce,
+    )
+    opened = open_message_body(
+        enc_private,
+        from_handle=vectors["handle"],
+        to_handle="#4S11EZW09MD",
+        seq=2,
+        nonce=sealed["nonce"],
+        eph_public_key=sealed["eph_public_key"],
+        ciphertext=sealed["ciphertext"],
+    )
+    assert opened == body
+    shared = eph.exchange(X25519PublicKey.from_public_bytes(enc_raw))
+    key = HKDF(
+        algorithm=hashes.SHA256(),
+        length=32,
+        salt=MSG_VERSION.encode("ascii"),
+        info=message_info(vectors["handle"], "#4S11EZW09MD", 2),
+    ).derive(shared)
+    assert AESGCM(key).decrypt(nonce, b64url_d(sealed["ciphertext"]), None) == body
+
+    inner = {"plaintext": {"kind": "note", "text": "cross-vector"}}
+    env = seal_envelope(
+        private_key=sign_private,
+        box_private=enc_private,
+        sender=sender,
+        recipient_card=sender,
+        seq=1,
+        prev="0" * 64,
+        purpose="msg",
+        plaintext=inner,
+        nonce=nonce,
+        ephemeral_private=eph,
+    )
+    assert env["v"] == MSG_VERSION
+    assert env["handle"] == "#CPV0CWYPXP4"
+    assert "ciphertext" in env
+    assert "ct" not in env
+    assert open_envelope(enc_private, sender, env) == inner
 
 
 def test_bootstrap_is_required(tmp_path: Path) -> None:
