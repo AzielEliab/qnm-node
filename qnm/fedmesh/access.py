@@ -44,9 +44,22 @@ GUEST_GET = frozenset(
     }
 )
 
-GUEST_OPS = frozenset({"message", "file", "inbox", "poll", "unlock", "fetch"})
+GUEST_OPS = frozenset({"message", "file", "inbox", "poll", "unlock", "fetch", "trust"})
 DEVELOPER_OPS = GUEST_OPS | frozenset(
-    {"task", "edge", "rollup", "push_rollup", "put", "push", "share", "sync", "sign_rollup"}
+    {
+        "task",
+        "edge",
+        "rollup",
+        "push_rollup",
+        "put",
+        "push",
+        "share",
+        "sync",
+        "sign_rollup",
+        "airlock_promote",
+        "pull_hops",
+        "pull_blinds",
+    }
 )
 
 

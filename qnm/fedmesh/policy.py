@@ -47,6 +47,15 @@ LIGHT_KINDS = frozenset(
         "ack",
         "register",
         "multisig",
+        "hop",
+        "hop-exit",
+        "blind",
+        "advisory",
+        "quarantine",
+        "island",
+        "airlock",
+        "airgap",
+        "vouch",
     }
 )
 

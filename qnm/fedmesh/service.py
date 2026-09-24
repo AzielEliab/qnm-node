@@ -24,13 +24,25 @@ from urllib.parse import parse_qs, quote
 
 from qnm.boot import AUTHOR, QNMRefuse
 from qnm.fedmesh.access import ROLES, Actor
+from qnm.fedmesh.airlock import Airlock, check_sha256sums, sha256sums_text
 from qnm.fedmesh.chain import Ledger
 from qnm.fedmesh.discover import Directory, LanSocket
 from qnm.fedmesh.identity import Identity, create_keystore, load_or_create_owner, open_keystore
 from qnm.fedmesh.objects import ObjectStore, RefLog, digest_status
+from qnm.fedmesh.peers import PeerGuard
 from qnm.fedmesh.policy import Outbound
 from qnm.fedmesh.relay import Spool, http_json
 from qnm.fedmesh.sandbox import run_job
+from qnm.fedmesh.secwire import (
+    blind_info,
+    hop_exit_view,
+    hop_info,
+    local_statement,
+    open_layer,
+    verify_statement,
+    wrap_two_hop,
+)
+from qnm.fedmesh.tor import TorAdapter
 from qnm.fedmesh.wire import (
     DEFAULT_RELAY,
     E2E_ALG,
@@ -63,6 +75,15 @@ from qnm.fedmesh.wire import (
 REPLICA_COPIES = 2
 
 
+_TOR_FATAL = frozenset({"FED-TOR-ABSENT", "FED-TOR-OFF"})
+
+
+def _reraise_transport(exc: QNMRefuse) -> None:
+    """A dead Tor proxy is not a relay miss. Do not fall through to clearnet."""
+    if exc.code in _TOR_FATAL:
+        raise exc
+
+
 class _Quota:
     def __init__(
         self,
@@ -92,6 +113,9 @@ class FedService:
         self.refs = RefLog(mesh / "refs.jsonl")
         self.store = ObjectStore(mesh / "objects")
         self.spool = Spool(mesh / "spool")
+        self.airlock = Airlock(mesh / "airlock")
+        self.peers = PeerGuard()
+        self.tor = TorAdapter()
         self.policy = Outbound()
         self.directory = Directory()
         self.directory.remember_card(self.owner.card)
@@ -124,6 +148,15 @@ class FedService:
         self.held_rollups: list[dict[str, Any]] = []
         self.held_refs: list[dict[str, Any]] = []
         self.seen_envelopes: set[str] = set()
+        self.two_hop = {"enabled": False, "entry": "", "exit": "", "exit_handle": ""}
+        self.hop_sources: list[str] = []
+        self.island = False
+        self._island_saved: dict[str, Any] | None = None
+        self.guard_seq = 0
+        self.guard_prev = "0" * 64
+        self._hop_queue: list[dict[str, Any]] = []
+        self._blinds: dict[str, list[dict[str, Any]]] = {}
+        self.delivered_hop_views: list[dict[str, Any]] = []
         self.proposals: dict[str, dict[str, Any]] = {}
         self.vault = {"enabled": False, "m": 0, "n": 0, "members": []}
         self.lan: LanSocket | None = None
@@ -134,6 +167,11 @@ class FedService:
             self.use_default_relay = True
             if DEFAULT_RELAY not in self.relay_urls:
                 self.relay_urls.append(DEFAULT_RELAY)
+        if self.island:
+            self.relay_urls = []
+            self.upstream_enabled = False
+            self.direct_on = False
+            self.cluster.clear()
 
     def bind(self, node: Any) -> None:
         self._writer = node._write_receipt
@@ -180,6 +218,12 @@ class FedService:
             "relay_plaintext": False,
             "local_first": True,
             "raw_leaves_only_on_share": True,
+            "e2e_mandatory": True,
+            "two_hop": bool(self.two_hop["enabled"]),
+            "tor": self.tor.status(),
+            "island": self.island,
+            "zero_knowledge": False,
+            "state_level_adversary": False,
             "temporal_lock": False,
             "chainlock_upstream": False,
             "sandbox": "subprocess-allowlist",
@@ -336,6 +380,66 @@ class FedService:
             return self.directory.merge_peer_list(dict(payload.get("card") or {}), rate_limit=int(payload.get("rate_limit") or 3))
         if op == "digest":
             return self.engine_digest()
+        if op == "e2e_off":
+            raise QNMRefuse("FED-POLICY", "end-to-end encryption is mandatory for mesh payloads")
+        if op == "name":
+            raise QNMRefuse("FED-WITNESS", "this daemon does not finalize name claims")
+        if op == "quarantine":
+            self._admin(actor)
+            return self.quarantine_peer(str(payload.get("peer") or ""), cut=True)
+        if op == "unquarantine":
+            self._admin(actor)
+            return self.quarantine_peer(str(payload.get("peer") or ""), cut=False)
+        if op == "island_on":
+            self._admin(actor)
+            return self.enter_island()
+        if op == "island_off":
+            self._admin(actor)
+            return self.leave_island()
+        if op == "two_hop_on":
+            self._admin(actor)
+            return self.enable_two_hop(
+                str(payload.get("entry") or ""),
+                str(payload.get("exit") or ""),
+                str(payload.get("exit_handle") or ""),
+            )
+        if op == "two_hop_off":
+            self._admin(actor)
+            self.two_hop["enabled"] = False
+            self._save_book()
+            return self.public_status()
+        if op == "tor_on":
+            self._admin(actor)
+            self.tor.configure(str(payload.get("proxy") or "127.0.0.1:9050"), enabled=True)
+            return self.public_status()
+        if op == "tor_off":
+            self._admin(actor)
+            self.tor.enabled = False
+            return self.public_status()
+        if op == "trust":
+            return self.trust_view(str(payload.get("peer") or actor.handle))
+        if op == "advisory_subscribe":
+            self._admin(actor)
+            return self.subscribe_advisory(dict(payload.get("statement") or {}))
+        if op == "vouch":
+            self._admin(actor)
+            return self.vouch_peer(str(payload.get("peer") or ""))
+        if op == "airlock_promote":
+            return self.promote_airlock(actor, str(payload.get("object") or ""), override=bool(payload.get("override")))
+        if op == "airgap_export":
+            self._admin(actor)
+            return self.export_airgap(str(payload.get("dest") or ""), list(payload.get("objects") or []))
+        if op == "airgap_import":
+            self._admin(actor)
+            return self.import_airgap(str(payload.get("src") or ""))
+        if op == "hop_sources":
+            self._admin(actor)
+            self.hop_sources = [str(url).rstrip("/") for url in list(payload.get("urls") or [])]
+            return {"ok": True, "hop_sources": list(self.hop_sources)}
+        if op == "pull_hops":
+            return {"ok": True, "blinds": self.pull_hops()}
+        if op == "pull_blinds":
+            return {"ok": True, "messages": self.pull_blinds()}
         if op in ("keystore", "export_key", "tenant_key"):
             raise QNMRefuse("FED-TENANT", "private keys are not readable through the API")
         raise QNMRefuse("FED-ROLE", f"unknown fedmesh op:{op}")
@@ -475,7 +579,10 @@ class FedService:
         return self._send_inner(actor, to_handle, plain, purpose="msg")
 
     def _send_inner(self, actor: Actor, to_handle: str, plaintext: dict[str, Any], *, purpose: str) -> dict[str, Any]:
+        if self.island:
+            raise QNMRefuse("FED-ISLAND", "island mode is on; mesh sends are stopped")
         ident = self._signer(actor)
+        self.peers.check(to_handle, len(canonical(plaintext)))
         card = self._card(to_handle)
         ph = payload_hash(plaintext)
         if self._writer is None:
@@ -503,6 +610,8 @@ class FedService:
         )
         if self.vault["enabled"]:
             return self._queue_multisig(ident, env)
+        if self.two_hop["enabled"] and purpose == "msg":
+            return self._route_two_hop(ident, env)
         return self._route(env, share=True)
 
     def _card(self, handle: str) -> dict[str, Any]:
@@ -514,7 +623,8 @@ class FedService:
         for url in self._ordered_relays():
             try:
                 got = self._get(url + "/v1/fedmesh/card?handle=" + quote(handle, safe=""))
-            except QNMRefuse:
+            except QNMRefuse as exc:
+                _reraise_transport(exc)
                 self.down.add(url)
                 continue
             if isinstance(got.get("card"), dict):
@@ -550,6 +660,7 @@ class FedService:
                         "response": response,
                     }
                 except QNMRefuse as exc:
+                    _reraise_transport(exc)
                     refused.append(exc.code)
                     continue
             if refused and all(code == "FED-EDGE-OFF" for code in refused):
@@ -562,7 +673,8 @@ class FedService:
         for url in self._ordered_relays():
             try:
                 self._post(url + "/v1/fedmesh/send", env, share=share)
-            except QNMRefuse:
+            except QNMRefuse as exc:
+                _reraise_transport(exc)
                 self.down.add(url)
                 continue
             self.down.discard(url)
@@ -580,6 +692,8 @@ class FedService:
             if not isinstance(result, dict):
                 raise QNMRefuse("FED-NO-ROUTE", "transport refused")
             return result
+        if self.tor.enabled:
+            return self.tor.request("POST", url, payload)
         return http_json("POST", url, payload)
 
     def _get(self, url: str) -> dict[str, Any]:
@@ -588,6 +702,8 @@ class FedService:
             if not isinstance(result, dict):
                 raise QNMRefuse("FED-NO-ROUTE", "transport refused")
             return result
+        if self.tor.enabled:
+            return self.tor.request("GET", url, None)
         return http_json("GET", url)
 
     def poll(self) -> list[dict[str, Any]]:
@@ -597,7 +713,8 @@ class FedService:
         for url in self._ordered_relays():
             try:
                 res = self._get(url + "/v1/fedmesh/inbox?handle=" + quote(self.owner.handle, safe=""))
-            except QNMRefuse:
+            except QNMRefuse as exc:
+                _reraise_transport(exc)
                 self.down.add(url)
                 continue
             self.down.discard(url)
@@ -626,6 +743,10 @@ class FedService:
     def ingest(self, env: dict[str, Any]) -> dict[str, Any]:
         with self._lock:
             verify_envelope(env)
+            sender = str(env.get("from") or "")
+            if sender in self.peers.quarantine:
+                raise QNMRefuse("FED-QUARANTINE", "this node has quarantined that handle")
+            self.peers.check(sender, len(str(env.get("ct") or "")))
             ident_env = envelope_id(env)
             if ident_env in self.seen_envelopes:
                 raise QNMRefuse("FED-REPLAY", "envelope already ingested")
@@ -655,13 +776,14 @@ class FedService:
                 text = str(plain.get("text") or "")
             elif kind == "file":
                 text = b64d(str(plain.get("content_b64") or "")).decode("utf-8", "replace")
+                self.airlock.land(text.encode("utf-8"))
             elif kind == "object":
                 raw = b64d(str(plain.get("content_b64") or ""))
                 if sha256_hex(raw) != plain.get("object"):
-                    raise QNMRefuse("FED-TAMPER", "fetched object hash mismatch")
-                self.store.put(raw)
-                self.objects_owner[sha256_hex(raw)] = self.owner.handle
+                    raise QNMRefuse("FG-GATE-REFUSE", "object bytes do not match the hash")
+                self.airlock.land(raw, claimed=str(plain.get("object") or ""))
             self.seen_envelopes.add(ident_env)
+            self.peers.heartbeats[sender] = self.peers.heartbeats.get(sender, 0) + 1
             self.inbox.append({"from": env.get("from"), "kind": kind, "text": text, "id": ident_env})
             self._write_inbox()
             if self._writer is not None:
@@ -744,7 +866,7 @@ class FedService:
         if route.endswith("/refs") and method == "POST":
             if not (self.direct_on or self.relay_on):
                 raise QNMRefuse("FED-DIRECT-OFF", "ref sync is off")
-            self.refs.apply(payload)
+            self._apply_ref(payload)
             self.held_refs.append(payload)
             return {"ok": True, "kind": "ref", "author": AUTHOR, "object": payload.get("object")}
         if route.endswith("/rollup") and method == "POST":
@@ -767,6 +889,17 @@ class FedService:
             if requester not in self.cluster:
                 raise QNMRefuse("FED-ROLE", "rollup co-sign stays inside the cluster")
             return self.sign_rollup(Actor("admin", self.owner.handle, via="cluster"), list(payload.get("changes") or []))
+        if route.endswith("/hop") and method == "POST":
+            self._need_relay()
+            return self.accept_hop(payload)
+        if route.endswith("/hop") and method == "GET":
+            self._need_relay()
+            handle = (qs.get("handle") or [""])[0]
+            return {"ok": True, "opened": False, "hops": self.take_hops(handle)}
+        if route.endswith("/blind") and method == "GET":
+            self._need_relay()
+            handle = (qs.get("handle") or [""])[0]
+            return {"ok": True, "blinds": self.take_blinds(handle)}
         if route.endswith("/delivery") and method == "POST":
             self._need_relay()
             self.policy.guard(payload, share=False)
@@ -830,7 +963,7 @@ class FedService:
             seq=seq + 1,
             utc=utc_now(),
         )
-        self.refs.apply(update)
+        self._apply_ref(update)
         self.pending_refs.append(update)
         self._fan_cluster(update, "/v1/fedmesh/refs")
         if self.upstream_enabled:
@@ -867,7 +1000,8 @@ class FedService:
         for url in urls:
             try:
                 res = self._post(url + "/v1/fedmesh/object", request, share=False)
-            except QNMRefuse:
+            except QNMRefuse as exc:
+                _reraise_transport(exc)
                 continue
             if "ct" not in res:
                 continue
@@ -875,10 +1009,9 @@ class FedService:
             plain = inner.get("plaintext") if isinstance(inner.get("plaintext"), dict) else {}
             raw = b64d(str(plain.get("content_b64") or ""))
             if sha256_hex(raw) != digest:
-                raise QNMRefuse("FED-TAMPER", "peer object hash mismatch")
-            self.store.put(raw)
-            self.objects_owner[digest] = ident.handle
-            self._save_book()
+                raise QNMRefuse("FG-GATE-REFUSE", "object bytes do not match the hash")
+            self.airlock.land(raw, claimed=digest)
+            self.peers.hash_matches[ident.handle] = self.peers.hash_matches.get(ident.handle, 0) + 1
             return raw
         raise QNMRefuse("FED-FETCH", "object not found on cluster or relay peers")
 
@@ -991,7 +1124,8 @@ class FedService:
                 try:
                     self._post(url.rstrip("/") + suffix, payload, share=False)
                     sent = True
-                except QNMRefuse:
+                except QNMRefuse as exc:
+                    _reraise_transport(exc)
                     continue
         return sent
 
@@ -999,7 +1133,8 @@ class FedService:
         for url in self._ordered_relays():
             try:
                 self._post(url.rstrip("/") + suffix, payload, share=False)
-            except QNMRefuse:
+            except QNMRefuse as exc:
+                _reraise_transport(exc)
                 self.down.add(url)
                 continue
             self.down.discard(url)
@@ -1128,6 +1263,327 @@ class FedService:
             self.cluster.add(sender)
         return result
 
+    def _apply_ref(self, update: dict[str, Any]) -> dict[str, Any]:
+        try:
+            return self.refs.apply(update)
+        except QNMRefuse as exc:
+            if exc.code == "FED-FORK":
+                self.peers.equivocation.add(str(update.get("handle") or ""))
+            raise
+
+    def _append_private(self, path: Path, row: dict[str, Any]) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("a", encoding="utf-8") as handle:
+            handle.write(json.dumps(row, sort_keys=True, separators=(",", ":")) + "\n")
+        os.chmod(path, stat.S_IRUSR | stat.S_IWUSR)
+
+    def _local_act(self, kind: str, fields: dict[str, Any]) -> dict[str, Any]:
+        self.guard_seq += 1
+        statement = local_statement(
+            self.owner.sign_private,
+            handle=self.owner.handle,
+            kind=kind,
+            fields=fields,
+            seq=self.guard_seq,
+            prev=self.guard_prev,
+        )
+        verify_statement(statement)
+        self.guard_prev = sha256_hex(canonical({key: value for key, value in statement.items() if key != "sig"}))
+        self._append_private(self.root / "data" / "fedmesh" / "local-statements.jsonl", statement)
+        if self._writer is not None:
+            self._writer(
+                "fedmesh_" + kind,
+                {"kind": kind, "statement_hash": self.guard_prev, "executed": False},
+            )
+        return statement
+
+    def quarantine_peer(self, peer: str, *, cut: bool) -> dict[str, Any]:
+        if not str(peer).startswith("#"):
+            raise QNMRefuse("FED-TAMPER", "quarantine peer handle refused")
+        if cut:
+            self.peers.quarantine.add(peer)
+        else:
+            self.peers.quarantine.discard(peer)
+        self._local_act("quarantine", {"peer": peer, "action": "cut" if cut else "restore"})
+        self._save_book()
+        return {"ok": True, "peer": peer, "quarantined": cut, "network_wide": False}
+
+    def enter_island(self) -> dict[str, Any]:
+        if not self.island:
+            self._island_saved = {
+                "relays": list(self.relay_urls),
+                "upstream": self.upstream_enabled,
+                "direct": self.direct_on,
+                "cluster": sorted(self.cluster),
+                "addrs": {key: list(value) for key, value in self.directory.addrs.items()},
+                "two_hop": dict(self.two_hop),
+            }
+            self.island = True
+            self.relay_urls = []
+            self.upstream_enabled = False
+            self.direct_on = False
+            self.two_hop = dict(self.two_hop)
+            self.two_hop["enabled"] = False
+            self.cluster.clear()
+            self.directory.addrs = {}
+            self._local_act("island", {"mode": "on"})
+            self._save_book()
+        status = self.public_status()
+        status["local_runtime"] = True
+        return status
+
+    def leave_island(self) -> dict[str, Any]:
+        saved = self._island_saved or {}
+        self.relay_urls = [str(url) for url in list(saved.get("relays") or [])]
+        self.upstream_enabled = bool(saved.get("upstream", True))
+        self.direct_on = bool(saved.get("direct", False))
+        self.cluster = set(saved.get("cluster") or [])
+        self.directory.addrs = {key: list(value) for key, value in dict(saved.get("addrs") or {}).items()}
+        if isinstance(saved.get("two_hop"), dict):
+            self.two_hop = dict(saved["two_hop"])
+        self.island = False
+        self._local_act("island", {"mode": "off"})
+        self._save_book()
+        synced = self.sync()
+        status = self.public_status()
+        status["resync"] = synced
+        return status
+
+    def enable_two_hop(self, entry: str, exit_url: str, exit_handle: str) -> dict[str, Any]:
+        if not entry or not exit_url or exit_handle not in self.directory.cards:
+            raise QNMRefuse("FED-NO-ROUTE", "two-hop needs an entry URL, an exit URL, and the exit card")
+        self.two_hop = {
+            "enabled": True,
+            "entry": entry.rstrip("/"),
+            "exit": exit_url.rstrip("/"),
+            "exit_handle": exit_handle,
+        }
+        self._save_book()
+        return self.public_status()
+
+    def _route_two_hop(self, ident: Identity, env: dict[str, Any]) -> dict[str, Any]:
+        exit_handle = str(self.two_hop.get("exit_handle") or "")
+        exit_card = self.directory.cards.get(exit_handle)
+        recipient = str(env.get("to") or "")
+        recipient_card = self.directory.cards.get(recipient)
+        if not exit_card or not recipient_card:
+            raise QNMRefuse("FED-NO-ROUTE", "two-hop is missing a card")
+        hop = wrap_two_hop(
+            ident.sign_private,
+            origin=ident.handle,
+            exit_handle=exit_handle,
+            exit_box=b64d(str(exit_card.get("box_pub") or "")),
+            recipient=recipient,
+            recipient_box=b64d(str(recipient_card.get("box_pub") or "")),
+            envelope=env,
+            seq=int(env.get("seq") or 0),
+            prev=str(env.get("prev") or ""),
+        )
+        self._post(str(self.two_hop["entry"]) + "/v1/fedmesh/hop", hop, share=True)
+        return {
+            "ok": True,
+            "path": "two-hop",
+            "e2e": True,
+            "entry_sees_payload": False,
+            "exit_sees_origin": False,
+        }
+
+    def accept_hop(self, hop: dict[str, Any]) -> dict[str, Any]:
+        if hop.get("kind") != "hop" or "ciphertext" not in hop:
+            raise QNMRefuse("FED-TAMPER", "hop envelope refused")
+        verify_statement(hop)
+        self._hop_queue.append(hop)
+        self._append_private(self.root / "data" / "fedmesh" / "hops-outer.jsonl", hop)
+        return {"ok": True, "stored": True, "opened": False, "kind": "hop"}
+
+    def take_hops(self, handle: str) -> list[dict[str, Any]]:
+        kept: list[dict[str, Any]] = []
+        views: list[dict[str, Any]] = []
+        for hop in self._hop_queue:
+            if str(hop.get("to") or "") == handle:
+                views.append(hop_exit_view(hop))
+            else:
+                kept.append(hop)
+        self._hop_queue = kept
+        return views
+
+    def pull_hops(self) -> list[dict[str, Any]]:
+        opened: list[dict[str, Any]] = []
+        for url in self.hop_sources:
+            res = self._get(url + "/v1/fedmesh/hop?handle=" + quote(self.owner.handle, safe=""))
+            for view in list(res.get("hops") or []):
+                if not isinstance(view, dict) or view.get("kind") != "hop-exit":
+                    continue
+                self.delivered_hop_views.append(view)
+                raw = open_layer(
+                    self.owner.box_private,
+                    hop_info(self.owner.handle, int(view.get("seq") or 0)),
+                    view,
+                )
+                blind = json.loads(raw.decode("utf-8"))
+                if not isinstance(blind, dict) or blind.get("kind") != "blind":
+                    raise QNMRefuse("FED-TAMPER", "hop layer was not a blind envelope")
+                if "handle" in blind or "from" in blind:
+                    raise QNMRefuse("FED-TAMPER", "exit hop layer carried an origin")
+                recipient = str(blind.get("to") or "")
+                self._blinds.setdefault(recipient, []).append(blind)
+                self._append_private(self.root / "data" / "fedmesh" / "blinds.jsonl", blind)
+                opened.append({"to": recipient, "seq": blind.get("seq")})
+        return opened
+
+    def take_blinds(self, handle: str) -> list[dict[str, Any]]:
+        return list(self._blinds.pop(handle, []))
+
+    def pull_blinds(self) -> list[dict[str, Any]]:
+        got: list[dict[str, Any]] = []
+        for url in self.hop_sources:
+            res = self._get(url + "/v1/fedmesh/blind?handle=" + quote(self.owner.handle, safe=""))
+            for blind in list(res.get("blinds") or []):
+                if not isinstance(blind, dict):
+                    continue
+                raw = open_layer(
+                    self.owner.box_private,
+                    blind_info(self.owner.handle, int(blind.get("seq") or 0)),
+                    blind,
+                )
+                env = json.loads(raw.decode("utf-8"))
+                if isinstance(env, dict):
+                    got.append(self.ingest(env))
+        return got
+
+    def trust_view(self, peer: str) -> dict[str, Any]:
+        anchors = self.ledger.prefix(peer)
+        age = None
+        if anchors:
+            try:
+                from datetime import datetime, timezone
+
+                stamp = datetime.strptime(str(anchors[0].get("utc") or ""), "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
+                age = int((datetime.now(timezone.utc) - stamp).total_seconds())
+            except ValueError:
+                age = None
+        view = {
+            "ok": True,
+            "peer": peer,
+            "chain_length": len(anchors),
+            "chain_age_s": age,
+            "heartbeats": self.peers.heartbeats.get(peer, 0),
+            "hash_matches": self.peers.hash_matches.get(peer, 0),
+            "vouches": 1 if peer in self.peers.vouches else 0,
+            "equivocation": peer in self.peers.equivocation,
+            "advisory": peer in self.peers.advisory_flags,
+            "quarantined": peer in self.peers.quarantine,
+        }
+        return view
+
+    def subscribe_advisory(self, statement: dict[str, Any]) -> dict[str, Any]:
+        verify_statement(statement)
+        if statement.get("kind") != "advisory":
+            raise QNMRefuse("FED-TAMPER", "advisory kind refused")
+        entries = statement.get("entries")
+        if not isinstance(entries, list) or len(entries) > 32:
+            raise QNMRefuse("FED-POISON", "advisory list refused")
+        flagged: list[str] = []
+        for row in entries:
+            if not isinstance(row, dict):
+                raise QNMRefuse("FED-POISON", "advisory entry refused")
+            if "score" in row:
+                raise QNMRefuse("FED-POLICY", "advisories have no score")
+            peer = str(row.get("peer") or "")
+            if not peer.startswith("#") or len(str(row.get("note") or "")) > 200:
+                raise QNMRefuse("FED-POISON", "advisory entry refused")
+            flagged.append(peer)
+        self.peers.advisories = [row for row in self.peers.advisories if row.get("handle") != statement.get("handle")]
+        self.peers.advisories.append(statement)
+        self.peers.advisory_flags = set()
+        for row in self.peers.advisories:
+            for entry in row.get("entries") or []:
+                if isinstance(entry, dict):
+                    self.peers.advisory_flags.add(str(entry.get("peer") or ""))
+        self._save_book()
+        return {"ok": True, "publisher": statement.get("handle"), "flagged": flagged, "affects": "subscriber"}
+
+    def vouch_peer(self, peer: str) -> dict[str, Any]:
+        if not peer.startswith("#"):
+            raise QNMRefuse("FED-TAMPER", "vouch handle refused")
+        statement = self._local_act("vouch", {"peer": peer})
+        self.peers.vouches[peer] = {"handle": statement.get("handle"), "peer": peer}
+        self._save_book()
+        return {"ok": True, "peer": peer, "local_only": True}
+
+    def promote_airlock(self, actor: Actor, digest: str, *, override: bool) -> dict[str, Any]:
+        if override and actor.role != "admin":
+            raise QNMRefuse("FED-ROLE", "scanner override is admin only")
+        report = self.airlock.scan(digest)
+        if report["infected"]:
+            raise QNMRefuse("FED-AIRLOCK", "scanner reported a match")
+        if report["scanner_absent"] and not override:
+            raise QNMRefuse("FED-AIRLOCK", "scanner absent; promotion needs an explicit operator override")
+        data = self.airlock.read(digest)
+        self.store.put(data)
+        ident = self._signer(actor)
+        self.objects_owner[digest] = ident.handle
+        if self._writer is not None:
+            self._writer(
+                "fedmesh_airlock",
+                {
+                    "object": digest,
+                    "override": bool(override and report["scanner_absent"]),
+                    "scanners": report["scanners"],
+                    "executed": False,
+                },
+                signer=ident,
+            )
+        self._save_book()
+        return {
+            "ok": True,
+            "promoted": True,
+            "object": digest,
+            "executed": False,
+            "scanners": report["scanners"],
+            "override": bool(override and report["scanner_absent"]),
+        }
+
+    def export_airgap(self, dest: str, digests: list[Any]) -> dict[str, Any]:
+        folder = Path(dest)
+        folder.mkdir(parents=True, exist_ok=True)
+        files: list[tuple[str, bytes]] = []
+        for digest in digests:
+            key = str(digest)
+            data = self.store.get(key) if self.store.has(key) else self.airlock.read(key)
+            (folder / key).write_bytes(data)
+            os.chmod(folder / key, stat.S_IRUSR | stat.S_IWUSR)
+            files.append((key, data))
+        manifest = sha256sums_text(files)
+        (folder / "SHA256SUMS").write_text(manifest, encoding="utf-8")
+        statement = self._local_act(
+            "airgap",
+            {
+                "manifest_sha256": sha256_hex(manifest.encode("utf-8")),
+                "files": [{"name": name, "sha256": sha256_hex(data)} for name, data in files],
+            },
+        )
+        (folder / "airgap.json").write_text(json.dumps(statement, sort_keys=True, indent=2) + "\n", encoding="utf-8")
+        os.chmod(folder / "airgap.json", stat.S_IRUSR | stat.S_IWUSR)
+        return {"ok": True, "dest": str(folder), "files": len(files), "sha256sum": True, "live": False}
+
+    def import_airgap(self, src: str) -> dict[str, Any]:
+        folder = Path(src)
+        statement = json.loads((folder / "airgap.json").read_text(encoding="utf-8"))
+        verify_statement(statement)
+        if statement.get("kind") != "airgap":
+            raise QNMRefuse("FED-TAMPER", "airgap statement refused")
+        manifest = (folder / "SHA256SUMS").read_text(encoding="utf-8")
+        if sha256_hex(manifest.encode("utf-8")) != statement.get("manifest_sha256"):
+            raise QNMRefuse("FG-GATE-REFUSE", "airgap manifest hash mismatch")
+        checked = check_sha256sums(manifest, folder)
+        landed = []
+        for row in checked:
+            data = (folder / row["name"]).read_bytes()
+            self.airlock.land(data, claimed=row["sha256"])
+            landed.append(row["sha256"])
+        return {"ok": True, "landed": landed, "promoted": False, "verified": True, "live": False}
+
     def _inbox_for(self, actor: Actor) -> dict[str, Any]:
         if actor.role == "guest":
             rows = [{"from": row["from"], "kind": row["kind"], "id": row["id"]} for row in self.inbox]
@@ -1154,6 +1610,15 @@ class FedService:
             "shares": self.shares,
             "objects_owner": self.objects_owner,
             "vault": self.vault,
+            "quarantine": sorted(self.peers.quarantine),
+            "island": self.island,
+            "island_saved": self._island_saved,
+            "guard_seq": self.guard_seq,
+            "guard_prev": self.guard_prev,
+            "two_hop": self.two_hop,
+            "advisories": self.peers.advisories,
+            "vouches": self.peers.vouches,
+            "equivocation": sorted(self.peers.equivocation),
         }
         path = self._book_path()
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -1181,3 +1646,24 @@ class FedService:
             if isinstance(row, dict) and isinstance(row.get("card"), dict):
                 self.directory.remember_card(row["card"])
             self.quotas.setdefault(handle, _Quota())
+        self.peers.quarantine = set(data.get("quarantine") or [])
+        self.island = bool(data.get("island"))
+        saved = data.get("island_saved")
+        self._island_saved = saved if isinstance(saved, dict) else None
+        self.guard_seq = int(data.get("guard_seq") or 0)
+        self.guard_prev = str(data.get("guard_prev") or ("0" * 64))
+        if isinstance(data.get("two_hop"), dict):
+            self.two_hop = dict(data["two_hop"])
+        self.peers.advisories = list(data.get("advisories") or [])
+        self.peers.advisory_flags = set()
+        for row in self.peers.advisories:
+            for entry in row.get("entries") or []:
+                if isinstance(entry, dict):
+                    self.peers.advisory_flags.add(str(entry.get("peer") or ""))
+        vouches = data.get("vouches") or {}
+        if isinstance(vouches, dict):
+            self.peers.vouches = dict(vouches)
+        self.peers.equivocation = set(data.get("equivocation") or [])
+        if self.island:
+            self.cluster.clear()
+            self.directory.addrs = {}

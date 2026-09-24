@@ -222,6 +222,59 @@ A new node needs at least one address: a relay URL, a peer URL, or LAN
 discovery. `needs_bootstrap` is true until one of those exists. There
 is no hidden directory.
 
+## Mesh security
+
+The runtime paper at `cursor/fed-mesh-e546` (`964a3cd9`) has no Mesh
+Security section yet. Statements this daemon signs for quarantine,
+island, vouch, advisory, hop, and airgap use that paper's version
+string `FED-MESH-1.0`, the same canonical JSON, and Ed25519 over the
+statement with `sig` removed. Keys and signatures on those statements
+are unpadded base64url.
+
+Payload mesh traffic cannot turn end-to-end encryption off (`e2e_off`
+is `FED-POLICY`). Ref updates, receipts, and digests stay signed
+public copies, which is what FED-MESH-1.0 already says. Two-hop is
+opt-in and off by default. The entry relay is given a hop statement
+whose `to` is the exit handle. The recipient handle and the inner
+envelope sit inside a layer the entry cannot open. The exit is given a
+`hop-exit` view with no origin handle. It opens a `blind` object that
+names the recipient and carries ciphertext, not the origin. Hop HKDF
+info is `FED-MESH-1.0|hop|<exit>|<seq>`. Blind info is
+`FED-MESH-1.0|blind|<recipient>|<seq>`. The runtime message cipher puts
+the origin in HKDF info, so it cannot hide the origin from a relay that
+must decrypt. This hop schedule is the one that matches the operator
+rule. It is not in the runtime paper yet.
+
+Tor is an optional SOCKS5 adapter (default `127.0.0.1:9050`), off by
+default. It is not an onion network this process runs. If the proxy is
+down, the send is `FED-TOR-ABSENT` and does not fall back to clearnet.
+TLS-through-Tor is not implemented. There is no zero-knowledge claim
+and no claim of safety against a state-level adversary.
+
+Each peer has a message and byte budget and a circuit breaker
+(`FED-PEER-QUOTA`, `FED-BREAKER`). Quarantine is a signed local
+decision (`network_wide: false`). Island mode drops relays and peer
+URLs, keeps local put/task/ref, and on leave restores them and syncs
+pending refs. A conflicting ref is still a fork.
+
+Inbound objects and files land in `data/fedmesh/airlock/` mode 0600 and
+are not executed. Promotion scans with ClamAV and YARA when those
+programs are on PATH. A missing scanner is `verdict: absent` (or
+`rules-absent` / `error`). Promotion then needs an Admin `override`.
+The receipt records scanner name, version, and verdict. Scanners catch
+known malware only. The task sandbox is the main defense.
+
+Airgap export writes `SHA256SUMS` in `sha256sum -c` form plus a signed
+`airgap.json`. Import checks both, then lands the bytes back in the
+airlock. That does not mark Plane C live.
+
+Local trust is one peer at a time: chain length, chain age, heartbeats
+seen, hash matches, vouches, an equivocation flag, and advisory flags.
+There is no score and no ranking. An advisory list is a signed
+statement. It changes only the subscriber. Name claims are not
+finalized here (`FED-WITNESS`); witness and proof-of-work belong to the
+relay spec, which does not define them yet.
+
 ## Open alignment with aziel-runtime
 
 The runtime spec was not on `main` when this draft was written. The
