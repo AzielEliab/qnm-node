@@ -20,6 +20,7 @@ Companion to `QNM-BUILD-1.0.md` and `AIH-WP-1.3.md`.
 | [RADIO-PHY-1.0](./RADIO-PHY-1.0.md) | Cellular ModemManager, Wi-Fi+BT NM/BlueZ, GNSS gpsd, NFC libnfc/PCSC — LIVE\|ABSENT\|REFUSED; no mock chatter |
 | [ATTACK-SURFACE-1.0](./ATTACK-SURFACE-1.0.md) | Listen map; qnm is THE local door; WAN refused; qnsd HTTP is extra-door |
 | [REDLINE-1.0](./REDLINE-1.0.md) | Auth / token-never-in-git / mesh GET never enables / AZ Generator not callable / radio LIVE only on presence / poison refuse / no rewrite |
+| [FED-MESH-1.0](./FED-MESH-1.0.md) | Local-first edge mesh on this daemon: per-handle keys, ciphertext shares, cluster-before-relay, content-addressed refs. Draft wire; not a claim that the runtime Worker speaks it |
 
 QNM-WP-1.0 absorbs BUILD+TOPO: local process ON, public rollup OFF and
 dies with the pull; GET /v1/mesh never enables. Phoenix is wait /

@@ -1,0 +1,257 @@
+# FED-MESH-1.0 — local-first edge mesh (daemon)
+
+**Author:** Aziel Eliab only
+**Software:** qnm-node
+**Wire module:** `qnm/fedmesh/wire.py`
+**Status:** daemon draft. `docs/designs/FED-MESH-1.0.md` is not on
+aziel-runtime `main`. This process does not claim the Worker speaks
+this draft.
+
+Lamb Lens holds under every flag below. **Service:** a participant is
+a handle, messages can be delivered, tasks run locally. **Clarity:**
+the sections below say what is encrypted, what a relay can read, what
+the sandbox stops, and what this process does not do. **Peace:**
+relay, direct, LAN discovery, edge compute, and multisig are off
+until an Admin turns that one thing on. Quotas apply. `GET` never
+enables.
+
+## What this process does
+
+The inner core stays on the daemon. Keys, content-addressed files,
+tenant tasks, and heavy compute run in this process. They do not wait
+on a network round-trip.
+
+Default outbound policy is enforced in `qnm/fedmesh/policy.py` on every
+post, not only described here. Without an explicit share, a post may
+be a signed receipt, a ref update, a rollup of hashes, a peer card, a
+digest, a fetch request, or a similar light record. Raw fields
+(`text`, `plaintext`, `content`, `content_b64`, `password`,
+`passphrase`, seeds, private keys, file bytes) are refused. A message
+or task leaves only when the caller sets `share` and the body is
+already ciphertext.
+
+A share is end-to-end between handles: X25519 static-static, HKDF-SHA256
+(salt `fedmesh-e2e`), AES-256-GCM with a 12-byte nonce. There is no
+forward secrecy and no XChaCha20-Poly1305. Relays see routing metadata
+only: version, kind `msg`, purpose `msg` or `task`, from, to, key id,
+signing public key, box public key, box binding signature, sequence,
+previous hash, time, nonce, ciphertext, envelope signature. The inner
+kind (note, file, object, task) sits inside the ciphertext.
+
+Author identity remains **Aziel Eliab**. The handle is the participant.
+
+## Handle
+
+`#` plus 11 lowercase RFC 4648 base32 characters (no padding) of
+SHA-256 of the raw 32-byte Ed25519 public key. `key_id` is the hex
+SHA-256 of that same public key. Anyone can recompute the handle from
+the public key. There is no central registry.
+
+The owner keystore is `data/identity/`. With `QNM_NODE_PASSPHRASE` set
+(environment only, never an argument), the seal is scrypt + AES-256-GCM.
+Argon2id is not used: it is not in the standard library or in the
+`cryptography` package this process depends on. With no passphrase, a
+random 32-byte `unattended.seal` (mode 0600) is the sealing key. A full
+disk copy includes that file. That is file-permission protection, not a
+passphrase.
+
+Tenant keys use the tenant passphrase (minimum 8 characters). The
+passphrase is not stored and is not logged. Admin has no decrypt API.
+Admin cannot unlock a tenant keystore. A copy of the sealed file is
+still readable by anyone with the operating-system user's rights; the
+passphrase is what keeps the seed closed.
+
+## Several instances
+
+Instances do not share keys or state.
+
+```bash
+python -m qnm doctor --data-dir /tmp/qnm-a --profile alpha
+python -m qnm serve --port 8891 --data-dir /tmp/qnm-a --profile alpha
+python -m qnm serve --port 8892 --data-dir /tmp/qnm-a --profile beta
+```
+
+`--data-dir` is the instance root. `--profile` nests
+`profiles/<name>` under that root (`^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$`).
+Passing both a non-default `--root` and a different `--data-dir`
+refuses (`FED-PROFILE`). `--port` is the loopback listen port.
+
+## Relays
+
+`--relay URL` (repeatable) sets outbound relay URLs. It does not enable
+relay hosting. `cfg/node.json` `fedmesh.use_default_relay` defaults to
+false, so this process does not contact
+`https://aziel-runtime.vibelock.workers.dev` unless the operator turns
+that on or passes the URL. The Worker is one configurable relay among
+many. This daemon does not claim the Worker accepts this draft.
+
+Any daemon can opt in as a relay (`POST /local/fedmesh` `{"op":"relay_on"}`,
+Admin only, default off). The relay speaks the same `/v1/fedmesh/*`
+paths on the same 127.0.0.1 listener. It stores ciphertext, with a TTL
+(default 86400 seconds) and a per-handle byte quota. Poll does not
+delete; ack does. The sender writes a second copy to another healthy
+relay when one is reachable. One relay's death does not drop a message
+that was replicated. A message accepted by only one relay dies with
+that relay. That is two copies, not a quorum.
+
+Health is a failed send or poll, not a background heartbeat. Direct or
+cluster is preferred when the direct inbox is on and a peer URL is
+known. Otherwise the client uses a relay. `upstream_off` stops relay
+contact and leaves cluster delivery alone.
+
+NAT, STUN, TURN, and ICE are not implemented. The HTTP listener refuses
+WAN bind. Peers that are not on this host's loopback fall back to a
+relay they can both reach. Calling that local-network speed means
+loopback between instances on one host. It is not zero-latency, and it
+is not a cross-machine LAN HTTP mesh.
+
+## Neighborhood
+
+Cluster peers are handles this node has marked, with their base URLs.
+Messaging, object fetch, ref fan-out, and rollup fan-out try those
+URLs first. With upstream cut (relay URLs dead or `upstream_off`), two
+loopback instances still exchange a message, share a file by hash, and
+co-sign a rollup. The rollup stays pending until a later `sync` and is
+then stored by a relay. The relay records `temporal_lock: false` and
+`chainlock_upstream: false`. This process does not claim runtime
+ChainLock or TemporalLock sealed it. `temporal.applied` is true only
+when an importable TemporalLock engine returns a stamp. None is
+imported here, so the stamp is local UTC and `applied` is false.
+
+LAN discovery is opt-in UDP (`lan_on`), magic `QNM1`, default bind
+127.0.0.1. It is not mDNS. Broadcast to 255.255.255.255 is a separate
+call and is reported as failed when the OS refuses it. Peer lists are
+signed, capped (32 peers, 8 relays, 4 addresses, 8192 bytes), and
+rate-limited. An oversized, unsigned, or over-rate list is rejected
+whole.
+
+Bluetooth: `bt` already exists as an opt-in PHY bearer, default off,
+LIVE only when BlueZ is present. This mesh does not send over
+Bluetooth. `bluetooth.mesh_transport` is false. A Bluetooth bearer for
+the mesh is future work, not a tested radio.
+
+## Content model
+
+Objects live under `data/fedmesh/objects/<sha256>`, mode 0600, and are
+checked against the hash on read. Private by default. Only the owner
+handle can share. A fetch is served only to a handle in that share
+list, and only as ciphertext. Other handles on the same daemon get
+`FED-SHARE`. Fetch tries cluster URLs, then other known peer URLs, then
+relays if upstream is on. The client checks the hash before caching.
+Storage quotas apply.
+
+A push publishes one signed ref update: version, kind `ref`, author,
+handle, key id, signing public key, ref name, object hash, previous
+ref hash, sequence, time, hash, signature. That update is the default
+broadcast. Receipt chains are per-handle branches. Co-signed rollups
+are merges of hashes, not of file bytes. Conflicting ref updates for
+the same handle and ref use the same fork check as receipts
+(`FED-FORK`, `FED-REPLAY`, `FED-GAP`).
+
+A node can push while upstream is off. The ref stays in a pending list.
+`sync` publishes it when a relay accepts. Cluster fan-out does not
+clear that pending list.
+
+## Receipts
+
+Every local receipt gains a `mesh` anchor before `receipt_hash`: signer
+handle, key id, per-handle sequence, previous hash, payload hash, time,
+signature. The existing QNM chain sequence is unchanged. Private keys
+and message plaintext are not written into receipts. The anchor hash
+covers the anchor core; the signature covers that core.
+
+Relays verify the envelope signature, the handle binding, and replay or
+fork of envelopes they have seen. They do not enforce sequence gaps,
+because they have not seen the sender's local boot history. The
+recipient enforces gaps. The sender includes a prefix of public anchors
+inside the ciphertext (cap 128) so the recipient can walk from genesis.
+
+Incoming envelopes reject replay (same envelope id), forks, wrong-key
+handles, gaps, and tampered ciphertext (`FED-E2E` when AES-GCM fails).
+
+## Tenants, roles, sandbox
+
+Admin manages tenants, quotas, relay, direct, LAN, edge, and multisig.
+Admin acts as the host identity and cannot read another identity's key,
+inbox, or private objects.
+
+Developer may message, fetch, put, push, share, sync, run tasks, and
+join rollups, inside quota.
+
+Guest may message, fetch, poll, and read the public GET routes. Guest
+receipt and inbox views are redacted.
+
+A missing `X-QNM-Role-Token` on 127.0.0.1 is the host Admin, so existing
+local callers stay owners. A presented token is enforced on every local
+route, including loopback. In-process `handle()` without an actor stays
+the owner path used by the existing suite.
+
+Tasks run in a child process (`python -m qnm.fedmesh.sandbox`): an
+allowlisted interpreter (add, sha256, alloc, burn, hang, crash, echo).
+No network or filesystem opcodes. The parent sets `RLIMIT_CPU`,
+`RLIMIT_AS` (768MB coarse backstop, including the interpreter, not a
+precise malloc quota), `RLIMIT_FSIZE`, and `RLIMIT_NOFILE`, and kills
+the process group on the wall clock. Cooperative caps inside the
+worker are the quota a tenant hits first. Secret environment variables
+are stripped. One tenant's quota, crash, or hang does not exit the
+parent.
+
+This is not a hypervisor, not seccomp, and not a defence against the
+same-UID OS user (that user can ptrace). "Smart contract" here means
+this task, not an EVM and not a gas market.
+
+Edge compute is off by default. A `purpose=task` envelope is refused
+with `FED-EDGE-OFF` before decrypt and before the sandbox runs. When
+an Admin enables it, the host writes a `fedmesh_edge_host` receipt of
+hashes only, and the sender already wrote a local message receipt.
+Both are signatures this process can show. Neither is a runtime
+ChainLock ack.
+
+## Multisig
+
+Off by default, stored in that node's `book.json` only. M-of-N
+Ed25519 approvals over the envelope id. The sender's own signature
+counts if they are a member. Below the threshold the envelope is not
+routed. A node with the vault off sends immediately. Signatures can be
+checked by anyone with the public keys; this process does not claim an
+upstream chain stored them.
+
+## Bootstrap
+
+A new node needs at least one address: a relay URL, a peer URL, or LAN
+discovery. `needs_bootstrap` is true until one of those exists. There
+is no hidden directory.
+
+## Open alignment with aziel-runtime
+
+The runtime spec was not on `main` when this draft was written. The
+wire format lives in `qnm/fedmesh/wire.py` so it can move later.
+Alignment points:
+
+1. Version string is `FED-MESH-1.0-draft` and may be renamed.
+2. Handle length is 11, RFC 4648 base32, lowercase, no padding.
+3. `key_id` is hex SHA-256 of the raw 32-byte Ed25519 public key.
+4. Canonical JSON is UTF-8, sorted keys, separators `,` and `:`.
+5. Ed25519 signs the canonical object with `sig` removed.
+6. E2E is X25519 static-static, HKDF-SHA256 salt `fedmesh-e2e`, AES-256-GCM, 12-byte nonce. AAD is the canonical routing tuple. No forward secrecy.
+7. HTTP is under `/v1/fedmesh/*`, not `/v1/mesh`.
+8. Rollups are signed plaintext hashes, not ciphertext. This daemon records them as relay-stored. It does not claim ChainLock or TemporalLock.
+9. The default relay URL is the Worker origin. This daemon does not claim the Worker speaks this draft.
+10. Ref update fields: `v`, `kind=ref`, `author`, `handle`, `key_id`, `sign_pub`, `ref`, `object` (64 hex), `prev`, `seq`, `utc`, `hash`, `sig`.
+11. Fetch request: `kind=fetch`, `from`, `key_id`, `sign_pub`, `object`, `utc`, `sig`. The response is a normal `msg` envelope whose plaintext is `{kind:object, object, content_b64}` inside ciphertext only.
+12. NAT traversal is not implemented. Relay listen is 127.0.0.1 only. Cross-host neighborhood HTTP is not implemented; cluster URLs in tests are other loopback ports.
+
+## Limits (plain)
+
+- No anonymity. Handles and routing metadata are visible to relays.
+- No forward secrecy.
+- No NAT traversal and no cross-machine LAN HTTP. Neighborhood delivery
+  here is loopback between instances, plus opt-in UDP that defaults to
+  127.0.0.1.
+- No Bluetooth mesh transport, no mDNS, no tested radio link.
+- No hypervisor sandbox. Same-UID ptrace is out of scope.
+- Replication is two copies, not a quorum. A single-homed message dies
+  with its relay.
+- Upstream ChainLock / TemporalLock acknowledgement is not claimed.
+- Owner unattended seal is file permissions. Tenant passphrase seals
+  are real scrypt seals; the OS user can still copy the ciphertext.

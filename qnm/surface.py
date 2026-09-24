@@ -59,6 +59,7 @@ LOCAL_CONTROL_PATHS = (
     "/local/shelf",
     "/local/export",
     "/local/redline",
+    "/local/fedmesh",
 )
 
 # qnsd-only routes stay on the same qnm door when the engine is attached.

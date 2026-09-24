@@ -104,5 +104,20 @@
     "plane_c_offline_verify": false,
     "plane_c_attest_required": true,
     "plane_c_before_live": "operator offline-verify/attest required"
+  },
+  "fedmesh": {
+    "enabled": false,
+    "relay_listen": false,
+    "direct_inbox": false,
+    "lan_discovery": false,
+    "edge_compute": false,
+    "use_default_relay": false,
+    "default_relay": "https://aziel-runtime.vibelock.workers.dev",
+    "relays": [],
+    "bootstrap": [],
+    "anonymity": false,
+    "nat_traversal": false,
+    "raw_leaves_only_on_share": true,
+    "bluetooth_mesh_transport": false
   }
 }

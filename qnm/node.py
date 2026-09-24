@@ -19,6 +19,8 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
+import re
 import sys
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -60,6 +62,7 @@ from qnm.score import score_local
 from qnm.spiderweb import Spiderweb
 from qnm.tethers import Tethers
 from qnm.wires import DWELL_S, Lockset, Wires
+from qnm.fedmesh.service import FedService
 
 STATES = (
     "COLD",
@@ -120,7 +123,26 @@ LOCAL_PATHS = {
     "/local/shelf",
     "/local/export",
     "/local/redline",
+    "/local/fedmesh",
 }
+
+_PROFILE_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
+
+
+def instance_directory(root: str = ".", data_dir: str | None = None, profile: str | None = None) -> Path:
+    """One data directory per daemon instance. Profiles do not share keys."""
+    if profile is not None and not _PROFILE_RE.match(profile):
+        raise QNMRefuse("FED-PROFILE", "profile name refused")
+    if (
+        data_dir
+        and root not in (None, "", ".")
+        and Path(data_dir).expanduser().resolve() != Path(root).expanduser().resolve()
+    ):
+        raise QNMRefuse("FED-PROFILE", "root and data-dir differ")
+    base = Path(data_dir or root or ".").expanduser()
+    if profile:
+        return (base / "profiles" / profile).resolve()
+    return base.resolve()
 
 
 def ensure_data_dirs(root: Path) -> None:
@@ -171,7 +193,12 @@ def load_cfg(root: Path) -> dict[str, Any]:
 
 
 class Node:
-    def __init__(self, root: Path | None = None, cfg: dict[str, Any] | None = None) -> None:
+    def __init__(
+        self,
+        root: Path | None = None,
+        cfg: dict[str, Any] | None = None,
+        passphrase: str | None = None,
+    ) -> None:
         self.root = Path(root) if root is not None else Path.cwd()
         ensure_data_dirs(self.root)
         self.cfg = cfg if cfg is not None else load_cfg(self.root)
@@ -202,11 +229,18 @@ class Node:
         self._receipt_log = self._receipt_dir / "receipts.jsonl"
         if not self._receipt_log.is_file():
             self._receipt_log.write_text("", encoding="utf-8")
+        self.fed = FedService(self.root, cfg=self.cfg, passphrase=passphrase)
+        self.fed.bind(self)
 
-    def _write_receipt(self, kind: str, body: dict[str, Any]) -> dict[str, Any]:
+    def _write_receipt(
+        self,
+        kind: str,
+        body: dict[str, Any],
+        signer: Any = None,
+    ) -> dict[str, Any]:
         refuse_public_geo(body)
         link = self.chain.append(kind, body)
-        receipt = {
+        projection = {
             "kind": kind,
             "body": body,
             "hash": link.hash,
@@ -217,6 +251,10 @@ class Node:
             "author": AUTHOR,
             "on_disk": True,
         }
+        refuse_public_geo(projection)
+        mesh = self.fed.anchor(projection, signer=signer)
+        receipt = dict(projection)
+        receipt["mesh"] = mesh
         refuse_public_geo(receipt)
         receipt["receipt_hash"] = receipt_digest(receipt)
         with self._receipt_log.open("a", encoding="utf-8") as fh:
@@ -272,6 +310,9 @@ class Node:
             "install_root": self.install_root,
             "identity": self.identity,
             "author": self.author,
+            "mesh_handle": self.fed.owner.handle,
+            "mesh_key_id": self.fed.owner.key_id,
+            "fedmesh": self.fed.public_status(),
             "spec": self.spec,
             "companion": COMPANION,
             "hub_law": HUB_LAW,
@@ -1306,7 +1347,13 @@ class Node:
         if self.state in ("COLD", "ISOLATED", "PHOENIX_LOCK"):
             raise QNMRefuse("QNM-STATE-LOCKED", f"inactive in {self.state}")
 
-    def handle(self, method: str, path: str, body: bytes = b"") -> tuple[int, dict[str, Any]]:
+    def handle(
+        self,
+        method: str,
+        path: str,
+        body: bytes = b"",
+        actor: Any = None,
+    ) -> tuple[int, dict[str, Any]]:
         parsed = urlparse(path)
         route = parsed.path.rstrip("/") or "/"
         if mesh_never_enables(path):
@@ -1314,6 +1361,18 @@ class Node:
                 "QNM-MESH-NEVER-ENABLES",
                 "GET /v1/mesh never enables radios",
             ).as_dict()
+        if route.startswith("/v1/fedmesh"):
+            try:
+                return 200, self.fed.http_relay(method.upper(), route, parsed.query, body)
+            except QNMRefuse as exc:
+                return 403, exc.as_dict()
+        if actor is not None:
+            try:
+                from qnm.fedmesh.access import authorize
+
+                authorize(actor, method.upper(), route, body)
+            except QNMRefuse as exc:
+                return 403, exc.as_dict()
         if route == "/local/outbox/cut":
             route = "/local/outbox/cut"
         elif route != "/local/outbox" and route.startswith("/local/"):
@@ -1321,15 +1380,36 @@ class Node:
         if route not in LOCAL_PATHS and route != "/local/outbox/cut":
             return 404, QNMRefuse("QNM-LOOPBACK-ONLY", "unknown local path").as_dict()
         try:
-            return 200, self._dispatch(method.upper(), route, body)
+            return 200, self._dispatch(method.upper(), route, body, actor)
         except QNMRefuse as exc:
             return 403, exc.as_dict()
 
-    def _dispatch(self, method: str, route: str, body: bytes) -> dict[str, Any]:
+    def _dispatch(self, method: str, route: str, body: bytes, actor: Any = None) -> dict[str, Any]:
         if route == "/local/state" and method == "GET":
             return self.snapshot()
         if route == "/local/receipts" and method == "GET":
-            return {"ok": True, "receipts": self.receipts(), "spec": SPEC, "author": AUTHOR}
+            rows = self.receipts()
+            if actor is not None and getattr(actor, "role", "") == "guest":
+                rows = [
+                    {
+                        "kind": row.get("kind"),
+                        "seq": row.get("seq"),
+                        "hash": row.get("hash"),
+                        "mesh": {
+                            "handle": (row.get("mesh") or {}).get("handle"),
+                            "seq": (row.get("mesh") or {}).get("seq"),
+                            "hash": (row.get("mesh") or {}).get("hash"),
+                        },
+                    }
+                    for row in rows
+                ]
+            return {"ok": True, "receipts": rows, "spec": SPEC, "author": AUTHOR}
+        if route == "/local/fedmesh" and method == "GET":
+            return self.fed.public_status()
+        if route == "/local/fedmesh" and method == "POST":
+            payload = json.loads(body.decode("utf-8") or "{}") if body else {}
+            who = actor if actor is not None else self.fed.actor_from_headers(None)
+            return self.fed.local_op(who, payload)
         if route == "/local/outbox" and method == "GET":
             return {"ok": True, "outbox": self.outbox.list(), "visible": True}
         if route == "/local/pairs" and method == "GET":
@@ -1519,18 +1599,31 @@ class _Handler(BaseHTTPRequestHandler):
             return False
         return True
 
+    def _actor(self):
+        try:
+            return self.node.fed.actor_from_headers(self.headers)
+        except QNMRefuse as exc:
+            self._send(403, exc.as_dict())
+            return None
+
     def do_GET(self) -> None:  # noqa: N802
         if not self._gate():
             return
-        code, payload = self.node.handle("GET", self.path, b"")
+        actor = self._actor()
+        if actor is None:
+            return
+        code, payload = self.node.handle("GET", self.path, b"", actor=actor)
         self._send(code, payload)
 
     def do_POST(self) -> None:  # noqa: N802
         if not self._gate():
             return
+        actor = self._actor()
+        if actor is None:
+            return
         length = int(self.headers.get("Content-Length") or 0)
         body = self.rfile.read(length) if length else b""
-        code, payload = self.node.handle("POST", self.path, body)
+        code, payload = self.node.handle("POST", self.path, body, actor=actor)
         self._send(code, payload)
 
 
@@ -1555,10 +1648,25 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("cmd", nargs="?", default="state", help="boot|state|serve|doctor|score")
     parser.add_argument("--root", default=".", help="install root directory")
+    parser.add_argument("--data-dir", default=None, help="instance data directory (alias of --root)")
+    parser.add_argument("--profile", default=None, help="named instance under profiles/<name>")
     parser.add_argument("--port", type=int, default=DEFAULT_PORT)
+    parser.add_argument(
+        "--relay",
+        action="append",
+        default=None,
+        help="outbound relay URL (repeatable). Does not turn on relay hosting",
+    )
     args = parser.parse_args(argv)
-    root = Path(args.root).resolve()
-    node = Node(root)
+    try:
+        root = instance_directory(args.root, args.data_dir, args.profile)
+    except QNMRefuse as exc:
+        print(json.dumps(exc.as_dict(), indent=2, sort_keys=True), file=sys.stderr)
+        return 2
+    passphrase = os.environ.get("QNM_NODE_PASSPHRASE") or None
+    node = Node(root, passphrase=passphrase)
+    if args.relay:
+        node.fed.set_relays(list(args.relay))
     try:
         if args.cmd == "boot":
             print(json.dumps(node.boot(), indent=2, sort_keys=True))
@@ -1579,6 +1687,13 @@ def main(argv: list[str] | None = None) -> int:
                 "ok": True,
                 "identity": IDENTITY,
                 "author": AUTHOR,
+                "mesh_handle": node.fed.owner.handle,
+                "anonymity": False,
+                "e2e": "x25519-hkdf-sha256-aes-256-gcm",
+                "e2e_forward_secrecy": False,
+                "nat_traversal": False,
+                "relay_listen": node.fed.relay_on,
+                "raw_leaves_only_on_share": True,
                 "spec": SPEC,
                 "companion": COMPANION,
                 "hub_law": HUB_LAW,
