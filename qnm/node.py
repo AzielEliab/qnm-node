@@ -50,6 +50,7 @@ from qnm.bitmesh import Bitmesh, refuse_public_geo
 from qnm.coldcopy import DEVICE_CLASSES, ColdCopy
 from qnm.fabric import CLAIM_CLOCK, FABRIC_SPEC, Fabric, mesh_never_enables, mesh_relay_route
 from qnm.planes import Planes
+from qnm.local_ui import HTML_SECURITY_HEADERS, prefers_html, render_dashboard, render_response
 from qnm.surface import SECURITY_HEADERS, refuse_wan_bind, require_operator_token, token_from_headers
 from qnsd.vias import radios_stamp
 from qnm.unkillability import compute_unkillability
@@ -1592,7 +1593,26 @@ class _Handler(BaseHTTPRequestHandler):
         host = self.client_address[0]
         return host in ("127.0.0.1", "::1")
 
-    def _send(self, code: int, payload: dict[str, Any]) -> None:
+    def _route(self) -> str:
+        return urlparse(self.path).path.rstrip("/") or "/"
+
+    def _send_html(self, code: int, page: str) -> None:
+        raw = page.encode("utf-8")
+        self.send_response(code)
+        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Content-Length", str(len(raw)))
+        for name, value in HTML_SECURITY_HEADERS:
+            self.send_header(name, value)
+        self.end_headers()
+        self.wfile.write(raw)
+
+    def _send(self, code: int, payload: dict[str, Any], route: str = "") -> None:
+        accept = ""
+        if self.headers is not None:
+            accept = str(self.headers.get("Accept") or "")
+        if prefers_html(accept):
+            self._send_html(code, render_response(route, code, payload, node=self.node))
+            return
         raw = json.dumps(payload, sort_keys=True).encode("utf-8")
         self.send_response(code)
         self.send_header("Content-Type", "application/json")
@@ -1603,13 +1623,14 @@ class _Handler(BaseHTTPRequestHandler):
         self.wfile.write(raw)
 
     def _gate(self) -> bool:
+        route = self._route()
         if not self._client_ok():
-            self._send(403, QNMRefuse("QNM-LOOPBACK-ONLY", "127.0.0.1 only").as_dict())
+            self._send(403, QNMRefuse("QNM-LOOPBACK-ONLY", "127.0.0.1 only").as_dict(), route=route)
             return False
         try:
             require_operator_token(token_from_headers(self.headers))
         except QNMRefuse as exc:
-            self._send(403, exc.as_dict())
+            self._send(403, exc.as_dict(), route=route)
             return False
         return True
 
@@ -1617,7 +1638,7 @@ class _Handler(BaseHTTPRequestHandler):
         try:
             return self.node.fed.actor_from_headers(self.headers)
         except QNMRefuse as exc:
-            self._send(403, exc.as_dict())
+            self._send(403, exc.as_dict(), route=self._route())
             return None
 
     def do_GET(self) -> None:  # noqa: N802
@@ -1626,8 +1647,12 @@ class _Handler(BaseHTTPRequestHandler):
         actor = self._actor()
         if actor is None:
             return
+        route = self._route()
+        if route in ("/local", "/local/ui") and prefers_html(str(self.headers.get("Accept") or "")):
+            self._send_html(200, render_dashboard(self.node))
+            return
         code, payload = self.node.handle("GET", self.path, b"", actor=actor, peer=self.client_address[0])
-        self._send(code, payload)
+        self._send(code, payload, route=route)
 
     def do_POST(self) -> None:  # noqa: N802
         if not self._gate():
@@ -1637,8 +1662,9 @@ class _Handler(BaseHTTPRequestHandler):
             return
         length = int(self.headers.get("Content-Length") or 0)
         body = self.rfile.read(length) if length else b""
+        route = self._route()
         code, payload = self.node.handle("POST", self.path, body, actor=actor, peer=self.client_address[0])
-        self._send(code, payload)
+        self._send(code, payload, route=route)
 
 
 def serve(
