@@ -11,6 +11,7 @@ Author: Aziel Eliab only.
 
 from __future__ import annotations
 
+import base64
 import hashlib
 import json
 import os
@@ -26,7 +27,20 @@ from qnm.boot import AUTHOR, QNMRefuse
 from qnm.fedmesh.access import ROLES, Actor
 from qnm.fedmesh.airlock import Airlock, check_sha256sums, sha256sums_text
 from qnm.fedmesh.chain import Ledger
+from qnm.fedmesh.design import (
+    DesignBook,
+    collect_texts,
+    draft_document,
+    image_hashes,
+    move_block,
+    page_html,
+    preview_html,
+    self_name,
+    site_bytes,
+)
 from qnm.fedmesh.discover import Directory, LanSocket
+from qnm.fedmesh.ethics import EthicsGate
+from qnm.fedmesh.mirrors import MirrorStore
 from qnm.fedmesh.identity import Identity, create_keystore, load_or_create_owner, open_keystore
 from qnm.fedmesh.objects import ObjectStore, RefLog, digest_status
 from qnm.fedmesh.peers import PeerGuard
@@ -39,6 +53,7 @@ from qnm.fedmesh.secwire import (
     hop_info,
     local_statement,
     open_layer,
+    signing_public_b64url,
     verify_statement,
     wrap_two_hop,
 )
@@ -84,6 +99,74 @@ def _reraise_transport(exc: QNMRefuse) -> None:
         raise exc
 
 
+def _b64_bytes(value: object) -> bytes:
+    try:
+        return base64.b64decode(str(value), validate=True)
+    except Exception as exc:  # noqa: BLE001
+        raise QNMRefuse("FG-GATE-REFUSE", "image encoding refused") from exc
+
+
+def _decode_files(value: object) -> dict[str, bytes]:
+    if not isinstance(value, dict):
+        raise QNMRefuse("FED-TAMPER", "mirror files refused")
+    decoded: dict[str, bytes] = {}
+    for name, item in value.items():
+        try:
+            decoded[str(name)] = base64.b64decode(str(item), validate=True)
+        except Exception as exc:  # noqa: BLE001
+            raise QNMRefuse("FG-GATE-REFUSE", "mirror file encoding refused") from exc
+    return decoded
+
+
+_CONTENT_KEYS = frozenset({"text", "plaintext", "content", "content_b64", "image", "body", "image_b64"})
+
+
+def _has_content_key(value: object) -> bool:
+    if isinstance(value, dict):
+        return any(key in _CONTENT_KEYS or _has_content_key(item) for key, item in value.items())
+    if isinstance(value, list):
+        return any(_has_content_key(item) for item in value)
+    return False
+
+
+def _prepare_blocks(svc: FedService, blocks: list[Any]) -> tuple[dict[str, Any] | None, list[dict[str, Any]]]:
+    """Land image bytes only after the local image checks clear. A missing model writes nothing."""
+    staged: list[dict[str, Any]] = []
+    raw_images: list[bytes] = []
+    pending: list[tuple[str, list[bytes], dict[str, Any]]] = []
+    for block in blocks:
+        if not isinstance(block, dict):
+            raise QNMRefuse("FED-SLOT", "block refused")
+        if block.get("type") == "image" and block.get("image_b64"):
+            raw = _b64_bytes(block.get("image_b64"))
+            raw_images.append(raw)
+            pending.append(("image", [raw], block))
+            continue
+        if block.get("type") == "gallery" and block.get("image_b64"):
+            blobs = [_b64_bytes(item) for item in list(block.get("image_b64") or [])]
+            raw_images.extend(blobs)
+            pending.append(("gallery", blobs, block))
+            continue
+        staged.append(block)
+        pending.append(("keep", [], block))
+    verdict = None
+    if raw_images:
+        verdict = svc.ethics.check(texts=[], images=raw_images)
+        if not verdict.get("ok"):
+            return verdict, []
+    cleaned: list[dict[str, Any]] = []
+    for kind, blobs, block in pending:
+        if kind == "keep":
+            cleaned.append(block)
+            continue
+        if kind == "image":
+            landed = svc.airlock.land(blobs[0])
+            cleaned.append({"type": "image", "sha256": landed["sha256"], "alt": str(block.get("alt") or "")})
+            continue
+        cleaned.append({"type": "gallery", "images": [svc.airlock.land(blob)["sha256"] for blob in blobs]})
+    return None, cleaned
+
+
 class _Quota:
     def __init__(
         self,
@@ -114,6 +197,9 @@ class FedService:
         self.store = ObjectStore(mesh / "objects")
         self.spool = Spool(mesh / "spool")
         self.airlock = Airlock(mesh / "airlock")
+        self.ethics = EthicsGate()
+        self.design = DesignBook(mesh / "design")
+        self.mirrors = MirrorStore(mesh / "mirrors")
         self.peers = PeerGuard()
         self.tor = TorAdapter()
         self.policy = Outbound()
@@ -152,6 +238,10 @@ class FedService:
         self.hop_sources: list[str] = []
         self.island = False
         self._island_saved: dict[str, Any] | None = None
+        self.isolated_local: dict[str, dict[str, Any]] = {}
+        self.isolated_seen: dict[str, dict[str, Any]] = {}
+        self._design_nonces: dict[str, str] = {}
+        self._design_open: set[str] = set()
         self.guard_seq = 0
         self.guard_prev = "0" * 64
         self._hop_queue: list[dict[str, Any]] = []
@@ -222,6 +312,14 @@ class FedService:
             "two_hop": bool(self.two_hop["enabled"]),
             "tor": self.tor.status(),
             "island": self.island,
+            "isolated_local": sorted(self.isolated_local),
+            "design_mode": "localhost-and-key-unlock",
+            "design_remote": False,
+            "ethics_fail_closed": True,
+            "ethics_models_absent": bool(self.ethics.status()["absent"]),
+            "user_slots": 3,
+            "reserved_slots": ["ae", "corpus", "godlock", "hdj"],
+            "cap7_factory_unchanged": True,
             "zero_knowledge": False,
             "state_level_adversary": False,
             "temporal_lock": False,
@@ -280,7 +378,7 @@ class FedService:
             if url not in self.directory.addrs[handle]:
                 self.directory.addrs[handle].append(url.rstrip("/"))
 
-    def local_op(self, actor: Actor, payload: dict[str, Any]) -> dict[str, Any]:
+    def local_op(self, actor: Actor, payload: dict[str, Any], peer: str = "127.0.0.1") -> dict[str, Any]:
         op = str(payload.get("op") or "")
         if op in ("relay_on", "relay_off"):
             self._admin(actor)
@@ -432,6 +530,32 @@ class FedService:
         if op == "airgap_import":
             self._admin(actor)
             return self.import_airgap(str(payload.get("src") or ""))
+        if op == "design_status":
+            return self.design_status(actor, peer)
+        if op == "design_challenge":
+            return self.design_challenge(actor, peer)
+        if op == "design_unlock":
+            return self.design_unlock(actor, str(payload.get("sig") or ""), str(payload.get("public_key") or ""), peer)
+        if op == "design_put":
+            return self.design_put(actor, payload, peer)
+        if op == "design_move":
+            return self.design_move(actor, payload, peer)
+        if op == "design_preview":
+            return self.design_preview(actor, int(payload.get("slot") or 0), peer)
+        if op == "design_publish":
+            return self.design_publish(actor, int(payload.get("slot") or 0), peer, override=bool(payload.get("override")))
+        if op == "appeal":
+            return self.appeal(actor, peer)
+        if op == "mirror_status":
+            self._require_local(peer)
+            return self.mirrors.status()
+        if op == "mirror_restore":
+            self._admin(actor)
+            self._require_local(peer)
+            return self.mirrors.restore(dict(payload.get("statement") or {}), _decode_files(payload.get("files")))
+        if op == "mirror_serve":
+            self._require_local(peer)
+            return self.mirrors.serve(str(payload.get("slot") or ""))
         if op == "hop_sources":
             self._admin(actor)
             self.hop_sources = [str(url).rstrip("/") for url in list(payload.get("urls") or [])]
@@ -827,8 +951,14 @@ class FedService:
                 "author": AUTHOR,
                 "relay": self.relay_on,
                 "direct": self.direct_on,
+                "isolated": bool(self.isolated_local),
                 "enabled_by_get": False,
             }
+        if self.isolated_local:
+            raise QNMRefuse("FED-ISOLATED", "this node is isolated and is not relaying")
+        subject = str(payload.get("handle") or payload.get("from") or (qs.get("handle") or [""])[0])
+        if subject and subject in self.isolated_seen:
+            raise QNMRefuse("FED-ISOLATED", "relay refuses an isolated handle")
         if route.endswith("/register") and method == "POST":
             self._need_relay()
             verify_box_binding(payload)
@@ -900,6 +1030,9 @@ class FedService:
             self._need_relay()
             handle = (qs.get("handle") or [""])[0]
             return {"ok": True, "blinds": self.take_blinds(handle)}
+        if route.endswith("/isolation") and method == "POST":
+            self._need_relay()
+            return self.accept_isolation(payload)
         if route.endswith("/delivery") and method == "POST":
             self._need_relay()
             self.policy.guard(payload, share=False)
@@ -1277,11 +1410,12 @@ class FedService:
             handle.write(json.dumps(row, sort_keys=True, separators=(",", ":")) + "\n")
         os.chmod(path, stat.S_IRUSR | stat.S_IWUSR)
 
-    def _local_act(self, kind: str, fields: dict[str, Any]) -> dict[str, Any]:
+    def _local_act(self, kind: str, fields: dict[str, Any], ident: Identity | None = None) -> dict[str, Any]:
+        signer = ident or self.owner
         self.guard_seq += 1
         statement = local_statement(
-            self.owner.sign_private,
-            handle=self.owner.handle,
+            signer.sign_private,
+            handle=signer.handle,
             kind=kind,
             fields=fields,
             seq=self.guard_seq,
@@ -1333,6 +1467,8 @@ class FedService:
         return status
 
     def leave_island(self) -> dict[str, Any]:
+        if self.isolated_local:
+            raise QNMRefuse("FED-ISOLATED", "isolation keeps this node off the mesh")
         saved = self._island_saved or {}
         self.relay_urls = [str(url) for url in list(saved.get("relays") or [])]
         self.upstream_enabled = bool(saved.get("upstream", True))
@@ -1584,6 +1720,275 @@ class FedService:
             landed.append(row["sha256"])
         return {"ok": True, "landed": landed, "promoted": False, "verified": True, "live": False}
 
+    def design_page(self, peer: str) -> dict[str, Any]:
+        self._require_local(peer)
+        unlocked = self.owner.handle in self._design_open
+        return {
+            "ok": True,
+            "html": page_html(handle=self.owner.handle, unlocked=unlocked),
+            "unlocked": unlocked,
+            "remote": False,
+            "slots": self.design.public_slots(),
+            "enabled_by_get": False,
+        }
+
+    def design_status(self, actor: Actor, peer: str) -> dict[str, Any]:
+        self._require_local(peer)
+        unlocked = actor.handle in self._design_open
+        body: dict[str, Any] = {
+            "ok": True,
+            "handle": actor.handle,
+            "self_name": self_name(actor.handle),
+            "unlocked": unlocked,
+            "remote": False,
+            "slots": self.design.public_slots(),
+            "ethics": self.ethics.status(),
+            "isolated": actor.handle in self.isolated_local,
+            "enabled_by_get": False,
+        }
+        if unlocked and actor.role != "guest":
+            body["drafts"] = self.design.load(actor.handle)
+        return body
+
+    def design_challenge(self, actor: Actor, peer: str) -> dict[str, Any]:
+        self._require_local(peer)
+        if actor.role == "guest":
+            raise QNMRefuse("FED-ROLE", "guest cannot unlock design mode")
+        nonce = secrets.token_hex(16)
+        self._design_nonces[actor.handle] = nonce
+        return {"ok": True, "handle": actor.handle, "nonce": nonce, "unlocked": False}
+
+    def design_unlock(self, actor: Actor, sig: str, public_key: str, peer: str) -> dict[str, Any]:
+        self._require_local(peer)
+        ident = self._signer(actor)
+        nonce = self._design_nonces.get(ident.handle)
+        if not nonce:
+            raise QNMRefuse("FED-PASSPHRASE", "design mode needs a fresh challenge")
+        statement = {
+            "v": "FED-MESH-1.0",
+            "kind": "design-unlock",
+            "author": AUTHOR,
+            "handle": ident.handle,
+            "public_key": public_key,
+            "nonce": nonce,
+            "sig": sig,
+        }
+        verify_statement(statement)
+        if signing_public_b64url(ident.sign_private) != public_key:
+            raise QNMRefuse("FED-WRONG-KEY", "design unlock key does not match the handle")
+        self._design_nonces.pop(ident.handle, None)
+        self._design_open.add(ident.handle)
+        return {"ok": True, "handle": ident.handle, "unlocked": True, "remote": False}
+
+    def design_put(self, actor: Actor, payload: dict[str, Any], peer: str) -> dict[str, Any]:
+        ident = self._require_design(actor, peer)
+        blocks = payload.get("blocks")
+        cleaned = None
+        if isinstance(blocks, list):
+            verdict, cleaned = _prepare_blocks(self, blocks)
+            if verdict is not None:
+                document = draft_document(
+                    handle=ident.handle,
+                    slot=int(payload.get("slot") or 0),
+                    label=str(payload.get("label") or ""),
+                    template=str(payload.get("template") or "blank"),
+                    theme=str(payload.get("theme") or "night"),
+                    blocks=[{"type": "text", "text": "removed"}],
+                )
+                document["blocks"] = [{"type": "image", "sha256": verdict.get("input_sha256"), "removed": True}]
+                self._ethics_violation(ident, document, verdict)
+        document = draft_document(
+            handle=ident.handle,
+            slot=int(payload.get("slot") or 0),
+            label=str(payload.get("label") or ""),
+            template=str(payload.get("template") or "blank"),
+            theme=str(payload.get("theme") or "night"),
+            blocks=cleaned,
+        )
+        self.design.save(ident.handle, document)
+        return {"ok": True, "slot": document["slot"], "label": document["label"], "published": False}
+
+    def design_move(self, actor: Actor, payload: dict[str, Any], peer: str) -> dict[str, Any]:
+        ident = self._require_design(actor, peer)
+        document = move_block(
+            self.design.get(ident.handle, int(payload.get("slot") or 0)),
+            int(payload.get("from") if payload.get("from") is not None else 0),
+            int(payload.get("to") if payload.get("to") is not None else 0),
+        )
+        self.design.save(ident.handle, document)
+        return {"ok": True, "slot": document["slot"], "blocks": len(document["blocks"])}
+
+    def design_preview(self, actor: Actor, slot: int, peer: str) -> dict[str, Any]:
+        ident = self._require_design(actor, peer)
+        document = self.design.get(ident.handle, slot)
+        page = preview_html(document)
+        return {"ok": True, "html": page, "published": False, "label": document["label"], "theme": document["theme"]}
+
+    def design_publish(self, actor: Actor, slot: int, peer: str, *, override: bool) -> dict[str, Any]:
+        ident = self._require_design(actor, peer)
+        document = self.design.get(ident.handle, slot)
+        texts = collect_texts(document)
+        images = []
+        for digest in image_hashes(document):
+            if not self.airlock.has(digest):
+                raise QNMRefuse("FG-GATE-REFUSE", "design image is not in the airlock")
+            images.append(self.airlock.read(digest))
+        try:
+            verdict = self.ethics.check(texts=texts, images=images)
+        except QNMRefuse:
+            raise
+        if not verdict.get("ok"):
+            self._ethics_violation(ident, document, verdict)
+        if self._writer is not None:
+            self._writer(
+                "fedmesh_ethics",
+                {
+                    "verdict": "clear",
+                    "models": verdict.get("models"),
+                    "content_stored": False,
+                    "catches_everything": False,
+                },
+                signer=ident,
+            )
+        for digest in image_hashes(document):
+            self.promote_airlock(actor, digest, override=override)
+        raw = site_bytes(document)
+        landed = self.airlock.land(raw)
+        self.promote_airlock(actor, landed["sha256"], override=override)
+        update = self.push_ref(actor, str(document["label"]), landed["sha256"])
+        document["published"] = True
+        self.design.save(ident.handle, document)
+        return {
+            "ok": True,
+            "published": True,
+            "object": landed["sha256"],
+            "ref": document["label"],
+            "ref_seq": update.get("seq"),
+            "ethics": "clear",
+            "content_in_receipt": False,
+        }
+
+    def appeal(self, actor: Actor, peer: str) -> dict[str, Any]:
+        ident = self._require_design(actor, peer)
+        row = self.isolated_local.get(ident.handle)
+        if not row:
+            raise QNMRefuse("FED-ISOLATED", "this handle is not isolated")
+        statement = self._local_act(
+            "appeal",
+            {
+                "subject_hash": row.get("statement_hash"),
+                "reason": row.get("reason"),
+                "request": "recheck",
+            },
+            ident=ident,
+        )
+        recheck: dict[str, Any] = {"ran": False, "lifted": False}
+        if row.get("reason") == "ETHICS-CHILD-IMAGE":
+            recheck["reason"] = "hash-only"
+        elif self.ethics.status()["absent"]:
+            recheck["reason"] = "model-absent"
+        else:
+            recheck = {"ran": True, "lifted": False, "reason": "review-does-not-lift"}
+        return {
+            "ok": True,
+            "appeal": statement.get("kind"),
+            "recheck": recheck,
+            "lifted": False,
+            "isolated": True,
+            "content_stored": False,
+            "reports_filed": False,
+        }
+
+    def accept_isolation(self, statement: dict[str, Any]) -> dict[str, Any]:
+        verify_statement(statement)
+        if statement.get("kind") != "isolation":
+            raise QNMRefuse("FED-TAMPER", "isolation statement kind refused")
+        if statement.get("handle") != statement.get("subject"):
+            raise QNMRefuse("FED-POLICY", "only the handle can sign its own isolation")
+        if statement.get("content_stored") is not False:
+            raise QNMRefuse("FED-POLICY", "isolation records do not carry content")
+        if _has_content_key(statement):
+            raise QNMRefuse("FED-POLICY", "isolation records do not carry content")
+        evidence = str(statement.get("evidence") or "")
+        if len(evidence) != 64:
+            raise QNMRefuse("FED-TAMPER", "isolation evidence hash refused")
+        self.isolated_seen[str(statement["subject"])] = {
+            "reason": statement.get("reason"),
+            "evidence": evidence,
+            "content_stored": False,
+        }
+        self._save_book()
+        return {"ok": True, "subject": statement.get("subject"), "network_wide": False, "stored_content": False}
+
+    def _require_local(self, peer: str) -> None:
+        host = str(peer or "").split("%", 1)[0].strip("[]")
+        if host not in ("127.0.0.1", "::1", "localhost"):
+            raise QNMRefuse("FG-GATE-REFUSE", "design mode refuses remote access")
+
+    def _require_design(self, actor: Actor, peer: str) -> Identity:
+        self._require_local(peer)
+        if actor.role == "guest":
+            raise QNMRefuse("FED-ROLE", "guest cannot edit design mode")
+        ident = self._signer(actor)
+        if ident.handle not in self._design_open:
+            raise QNMRefuse("FED-PASSPHRASE", "design mode requires the handle key unlock")
+        return ident
+
+    def _ethics_violation(self, ident: Identity, document: dict[str, Any], verdict: dict[str, Any]) -> None:
+        reason = str(verdict.get("reason") or "")
+        if reason == "ETHICS-CHILD-IMAGE":
+            for digest in image_hashes(document):
+                self.airlock.drop(digest)
+            kept = []
+            for block in document.get("blocks") or []:
+                if block.get("type") == "image":
+                    kept.append({"type": "image", "sha256": block.get("sha256"), "removed": True})
+                elif block.get("type") == "gallery":
+                    kept.append({"type": "gallery", "images": list(block.get("images") or []), "removed": True})
+                else:
+                    kept.append(block)
+            document["blocks"] = kept
+            self.design.save(ident.handle, document)
+        statement = self._local_act(
+            "isolation",
+            {
+                "subject": ident.handle,
+                "reason": reason,
+                "evidence": verdict.get("evidence"),
+                "content_stored": False,
+                "chainlock": False,
+                "temporal_lock": False,
+            },
+            ident=ident,
+        )
+        digest = sha256_hex(canonical({key: value for key, value in statement.items() if key != "sig"}))
+        self.isolated_local[ident.handle] = {
+            "reason": reason,
+            "evidence": verdict.get("evidence"),
+            "statement_hash": digest,
+            "content_stored": False,
+            "chainlock": False,
+            "temporal_lock": False,
+        }
+        self.enter_island()
+        self.relay_on = False
+        if self._writer is not None:
+            self._writer(
+                "fedmesh_ethics",
+                {
+                    "verdict": "refuse",
+                    "reason": reason,
+                    "evidence": verdict.get("evidence"),
+                    "model": verdict.get("model"),
+                    "version": verdict.get("version"),
+                    "content_stored": False,
+                    "catches_everything": False,
+                },
+                signer=ident,
+            )
+        self._save_book()
+        raise QNMRefuse("FED-ETHICS", reason)
+
     def _inbox_for(self, actor: Actor) -> dict[str, Any]:
         if actor.role == "guest":
             rows = [{"from": row["from"], "kind": row["kind"], "id": row["id"]} for row in self.inbox]
@@ -1612,6 +2017,8 @@ class FedService:
             "vault": self.vault,
             "quarantine": sorted(self.peers.quarantine),
             "island": self.island,
+            "isolated_local": self.isolated_local,
+            "isolated_seen": self.isolated_seen,
             "island_saved": self._island_saved,
             "guard_seq": self.guard_seq,
             "guard_prev": self.guard_prev,
@@ -1648,6 +2055,12 @@ class FedService:
             self.quotas.setdefault(handle, _Quota())
         self.peers.quarantine = set(data.get("quarantine") or [])
         self.island = bool(data.get("island"))
+        local_rows = data.get("isolated_local") or {}
+        seen_rows = data.get("isolated_seen") or {}
+        self.isolated_local = dict(local_rows) if isinstance(local_rows, dict) else {}
+        self.isolated_seen = dict(seen_rows) if isinstance(seen_rows, dict) else {}
+        if self.isolated_local:
+            self.island = True
         saved = data.get("island_saved")
         self._island_saved = saved if isinstance(saved, dict) else None
         self.guard_seq = int(data.get("guard_seq") or 0)

@@ -154,8 +154,10 @@ python -m qnm serve --port 8892 --data-dir /tmp/qnm-a --profile beta --relay htt
 `--relay` sets outbound relay URLs. It does not turn on relay hosting.
 Mesh payloads stay end-to-end encrypted; that cannot be switched off.
 Two-hop routing, a Tor SOCKS adapter, peer quarantine, and island mode
-are Admin opts, default off. `GET` does not enable them. See the Mesh
-security section of [docs/FED-MESH-1.0.md](docs/FED-MESH-1.0.md).
+are Admin opts, default off. Design mode for the three user domains is
+loopback plus a handle-key unlock; a remote peer is refused. Publish
+fails closed when a local ethics model is absent. `GET` does not enable
+any of these. See [docs/FED-MESH-1.0.md](docs/FED-MESH-1.0.md).
 The passphrase, when used, is `QNM_NODE_PASSPHRASE` in the environment,
 never an argument.
 

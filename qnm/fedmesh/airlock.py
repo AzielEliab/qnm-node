@@ -96,6 +96,11 @@ class Airlock:
     def has(self, digest: str) -> bool:
         return (self.root / digest).is_file()
 
+    def drop(self, digest: str) -> None:
+        path = self.root / digest
+        if path.is_file():
+            path.unlink()
+
     def read(self, digest: str) -> bytes:
         path = self.root / digest
         if not path.is_file():

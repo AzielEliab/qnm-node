@@ -1,11 +1,13 @@
 """Mesh-security statements in the FED-MESH-1.0 statement shape.
 
-aziel-runtime `docs/designs/FED-MESH-1.0.md` at
-`cursor/fed-mesh-e546` (`964a3cd9`) has no Mesh Security section.
+aziel-runtime `docs/designs/FED-MESH-1.0.md` on
+`cursor/fed-mesh-e546` (`b6b2ea9a`) has a Mesh Security section.
 These statements use that spec's version, canonical JSON (sorted
 keys, no extra whitespace), and an Ed25519 signature over the
 statement with `sig` removed. Public keys and signatures are
-unpadded base64url, matching the runtime codec.
+unpadded base64url, matching the runtime codec. Wave 3 records
+(isolation, appeal, mirror-restore, design-unlock) use the same
+shape. That paper does not define them yet.
 
 The hop key schedule does not put the origin handle in HKDF info.
 The runtime message cipher does (`FED-MESH-1.0|from|to|seq`), which

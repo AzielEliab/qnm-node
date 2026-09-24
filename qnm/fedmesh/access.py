@@ -41,10 +41,13 @@ GUEST_GET = frozenset(
         "/local/surface",
         "/local/redline",
         "/local/fedmesh",
+        "/local/design",
     }
 )
 
-GUEST_OPS = frozenset({"message", "file", "inbox", "poll", "unlock", "fetch", "trust"})
+GUEST_OPS = frozenset(
+    {"message", "file", "inbox", "poll", "unlock", "fetch", "trust", "design_status", "mirror_status", "mirror_serve"}
+)
 DEVELOPER_OPS = GUEST_OPS | frozenset(
     {
         "task",
@@ -59,6 +62,13 @@ DEVELOPER_OPS = GUEST_OPS | frozenset(
         "airlock_promote",
         "pull_hops",
         "pull_blinds",
+        "design_challenge",
+        "design_unlock",
+        "design_put",
+        "design_move",
+        "design_preview",
+        "design_publish",
+        "appeal",
     }
 )
 

@@ -56,6 +56,9 @@ LIGHT_KINDS = frozenset(
         "airlock",
         "airgap",
         "vouch",
+        "isolation",
+        "appeal",
+        "mirror-restore",
     }
 )
 

@@ -54,7 +54,9 @@ There is no WAN listen and no NAT traversal. LAN discovery UDP binds
 not a mesh transport. Two-hop routing, the Tor SOCKS adapter, peer
 quarantine, and island mode are Admin POSTs on this same listener.
 `GET /local/fedmesh` does not enable them. A dead Tor proxy does not
-fall back to clearnet. See [FED-MESH-1.0](FED-MESH-1.0.md).
+fall back to clearnet. `GET /local/design` is the local design page.
+It does not unlock the handle key. Design edits and publish refuse a
+non-loopback peer with `FG-GATE-REFUSE`. See [FED-MESH-1.0](FED-MESH-1.0.md).
 
 ## Monolith-or-split decision
 

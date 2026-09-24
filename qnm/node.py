@@ -124,6 +124,7 @@ LOCAL_PATHS = {
     "/local/export",
     "/local/redline",
     "/local/fedmesh",
+    "/local/design",
 }
 
 _PROFILE_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
@@ -1353,6 +1354,7 @@ class Node:
         path: str,
         body: bytes = b"",
         actor: Any = None,
+        peer: str = "127.0.0.1",
     ) -> tuple[int, dict[str, Any]]:
         parsed = urlparse(path)
         route = parsed.path.rstrip("/") or "/"
@@ -1380,11 +1382,11 @@ class Node:
         if route not in LOCAL_PATHS and route != "/local/outbox/cut":
             return 404, QNMRefuse("QNM-LOOPBACK-ONLY", "unknown local path").as_dict()
         try:
-            return 200, self._dispatch(method.upper(), route, body, actor)
+            return 200, self._dispatch(method.upper(), route, body, actor, peer)
         except QNMRefuse as exc:
             return 403, exc.as_dict()
 
-    def _dispatch(self, method: str, route: str, body: bytes, actor: Any = None) -> dict[str, Any]:
+    def _dispatch(self, method: str, route: str, body: bytes, actor: Any = None, peer: str = "127.0.0.1") -> dict[str, Any]:
         if route == "/local/state" and method == "GET":
             return self.snapshot()
         if route == "/local/receipts" and method == "GET":
@@ -1406,10 +1408,12 @@ class Node:
             return {"ok": True, "receipts": rows, "spec": SPEC, "author": AUTHOR}
         if route == "/local/fedmesh" and method == "GET":
             return self.fed.public_status()
+        if route == "/local/design" and method == "GET":
+            return self.fed.design_page(peer)
         if route == "/local/fedmesh" and method == "POST":
             payload = json.loads(body.decode("utf-8") or "{}") if body else {}
             who = actor if actor is not None else self.fed.actor_from_headers(None)
-            return self.fed.local_op(who, payload)
+            return self.fed.local_op(who, payload, peer=peer)
         if route == "/local/outbox" and method == "GET":
             return {"ok": True, "outbox": self.outbox.list(), "visible": True}
         if route == "/local/pairs" and method == "GET":
@@ -1612,7 +1616,7 @@ class _Handler(BaseHTTPRequestHandler):
         actor = self._actor()
         if actor is None:
             return
-        code, payload = self.node.handle("GET", self.path, b"", actor=actor)
+        code, payload = self.node.handle("GET", self.path, b"", actor=actor, peer=self.client_address[0])
         self._send(code, payload)
 
     def do_POST(self) -> None:  # noqa: N802
@@ -1623,7 +1627,7 @@ class _Handler(BaseHTTPRequestHandler):
             return
         length = int(self.headers.get("Content-Length") or 0)
         body = self.rfile.read(length) if length else b""
-        code, payload = self.node.handle("POST", self.path, body, actor=actor)
+        code, payload = self.node.handle("POST", self.path, body, actor=actor, peer=self.client_address[0])
         self._send(code, payload)
 
 

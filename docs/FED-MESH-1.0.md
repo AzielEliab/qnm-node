@@ -224,12 +224,12 @@ is no hidden directory.
 
 ## Mesh security
 
-The runtime paper at `cursor/fed-mesh-e546` (`964a3cd9`) has no Mesh
-Security section yet. Statements this daemon signs for quarantine,
-island, vouch, advisory, hop, and airgap use that paper's version
-string `FED-MESH-1.0`, the same canonical JSON, and Ed25519 over the
-statement with `sig` removed. Keys and signatures on those statements
-are unpadded base64url.
+The runtime paper on `cursor/fed-mesh-e546` (`b6b2ea9a`) has a Mesh
+Security section. It does not yet define design mode, ethics reason
+codes, isolation records, or reserved hub slots. Statements this
+daemon signs use version `FED-MESH-1.0`, the same canonical JSON, and
+Ed25519 over the statement with `sig` removed. Keys and signatures on
+those statements are unpadded base64url.
 
 Payload mesh traffic cannot turn end-to-end encryption off (`e2e_off`
 is `FED-POLICY`). Ref updates, receipts, and digests stay signed
@@ -273,7 +273,54 @@ seen, hash matches, vouches, an equivocation flag, and advisory flags.
 There is no score and no ranking. An advisory list is a signed
 statement. It changes only the subscriber. Name claims are not
 finalized here (`FED-WITNESS`); witness and proof-of-work belong to the
-relay spec, which does not define them yet.
+relay spec.
+
+## Design mode, ethics, isolation, reserved mirrors
+
+Design mode edits the three user `.aziel` slots on this process only.
+The HTTP peer must be loopback, and the handle must sign a one-time
+challenge. A remote peer is `FG-GATE-REFUSE`. `GET /local/design` and
+`GET /local/fedmesh` do not unlock it and do not enable anything.
+
+A draft is templates, an ordered block list (text, image, link,
+gallery, embed of a local app), and a theme: night, day, or aziel.
+Preview HTML is generated here. It does not paint image bytes and it
+does not fetch links. Block order is the edit model. The self-certifying
+`<handle>.aziel` name is not one of the three slots. This daemon's
+handle alphabet is still the draft lowercase base32, not Crockford.
+
+Publish checks ethics before any ref is signed. The required checks are
+nudity/sexual images, images of children, and hate text. They run in a
+local process. Content is not sent off the node to be classified. This
+program ships no model weights. A missing model is `absent` and publish
+is `FED-ETHICS-ABSENT`. That is fail closed. Absence does not isolate
+the handle. A test double is not a detector. Classifiers miss things
+and they false-positive. This does not catch everything.
+
+A refusal writes an isolation statement: reason code, evidence hash,
+`content_stored: false`, `chainlock: false`, `temporal_lock: false`.
+The content is not in the statement. The handle's node enters island
+mode and stops relaying. Local keys and drafts stay. `leave_island` is
+refused while that isolation stands. A child-image refusal deletes the
+staged bytes and keeps the hash. This program does not store or forward
+that image, and it does not file a report. Operators follow the law
+where they are, including a US duty to report child sexual abuse
+material to NCMEC. An appeal is a signed request for a re-check.
+`lifted` stays false. This process has no review board.
+
+A relay that is shown a self-signed isolation record refuses that
+handle's later relay acts. Relays that never see the record are not
+updated. `network_wide` is false.
+
+Four reserved slots mirror `AZ.AzielEliab.AZ`,
+`AZ.AzielCorpusLibrary.AZ`, `AZ.Godlock.AZ`, and `AZ.HeDidntJump.AZ`
+(`ae`, `corpus`, `godlock`, `hdj`). They are not user-nameable. Restore
+keeps a local copy only when the statement verifies and every file hash
+matches. A mismatch is `FG-GATE-REFUSE` and writes nothing. Serving
+re-checks the hash. `origin_restored` stays false: this node does not
+write the public hub. MirageGrid Cap-7 factory names
+(`azgrid.az` and the rest of that allowlist) are a separate layer and
+are not changed here.
 
 ## Open alignment with aziel-runtime
 
