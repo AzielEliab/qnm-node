@@ -114,8 +114,20 @@ MESH_NEVER_ENABLE = frozenset(
 )
 
 
+def mesh_relay_route(path: str) -> bool:
+    """FED-MESH relay cite and acts. Not a radio-enable path."""
+    route = urlparse(str(path or "")).path.rstrip("/") or "/"
+    return route == "/v1/mesh/relay" or route.startswith("/v1/mesh/relay/")
+
+
 def mesh_never_enables(path: str) -> bool:
-    """True for GET/POST mesh routes. Never a radio-enable path."""
+    """True for GET/POST mesh routes. Never a radio-enable path.
+
+    ``/v1/mesh/relay`` is the runtime relay. GET on that root is health
+    and does not enable radios. ``/v1/mesh`` itself still refuses.
+    """
+    if mesh_relay_route(path):
+        return False
     route = urlparse(str(path or "")).path.rstrip("/") or "/"
     if route in MESH_NEVER_ENABLE:
         return True

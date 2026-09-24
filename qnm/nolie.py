@@ -66,8 +66,14 @@ def _canonical(obj: dict[str, Any]) -> bytes:
 
 
 def receipt_digest(receipt: dict[str, Any]) -> str:
-    """SHA256 of a receipt minus its own receipt_hash field."""
-    core = {key: value for key, value in receipt.items() if key != "receipt_hash"}
+    """SHA256 of a receipt minus its own receipt_hash field.
+
+    ``identity_anchor`` is attached after the hash and contains that
+    hash, so it stays outside the digest. Older receipts without the
+    field still hash the same way.
+    """
+    skipped = {"receipt_hash", "identity_anchor"}
+    core = {key: value for key, value in receipt.items() if key not in skipped}
     return sha256_hex(_canonical(core))
 
 

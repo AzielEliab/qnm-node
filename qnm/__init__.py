@@ -58,6 +58,7 @@ __bitmesh__ = BITMESH_SPEC
 __unkill__ = UNKILL_SPEC
 __planes__ = PLANES_SPEC
 __pair_bind__ = "AIH-WP-1.3"
+__fedmesh__ = "FED-MESH-1.0-draft"
 __hub_law__ = "AIH-WP-1.1"
 
 __all__ = [

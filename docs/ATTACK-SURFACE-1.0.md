@@ -45,6 +45,19 @@ invent PRESENT.
 `/v1/mesh?enable=1` return `QNM-MESH-NEVER-ENABLES` and do not change
 bearers or radios.
 
+`/v1/fedmesh/*` and `/local/fedmesh` are a different prefix. They share
+this same 127.0.0.1 listener. Relay hosting, direct inbox, LAN UDP
+discovery, and edge compute are off until an Admin POST. `GET
+/v1/fedmesh/health` and `GET /local/fedmesh` do not flip those flags.
+There is no WAN listen and no NAT traversal. LAN discovery UDP binds
+127.0.0.1 by default. Bluetooth remains an opt-in PHY bearer and is
+not a mesh transport. Two-hop routing, the Tor SOCKS adapter, peer
+quarantine, and island mode are Admin POSTs on this same listener.
+`GET /local/fedmesh` does not enable them. A dead Tor proxy does not
+fall back to clearnet. `GET /local/design` is the local design page.
+It does not unlock the handle key. Design edits and publish refuse a
+non-loopback peer with `FG-GATE-REFUSE`. See [FED-MESH-1.0](FED-MESH-1.0.md).
+
 ## Monolith-or-split decision
 
 **Consolidate.** Two HTTP servers on the same loopback port is a

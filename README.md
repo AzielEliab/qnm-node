@@ -136,6 +136,31 @@ python -m qnm serve
 python -m qnsd doctor
 ```
 
+Local-first edge mesh ([docs/FED-MESH-1.0.md](docs/FED-MESH-1.0.md)):
+each process keeps its own handle (`#` + 11 Crockford base32 chars of the signing
+key). Author identity stays **Aziel Eliab**. Keys, files, and tasks stay
+on the node. The default outbound post is a signed ref, receipt, or
+digest. Raw bytes leave only as an explicit end-to-end encrypted share.
+Relay hosting, direct inbox, LAN discovery, and edge compute are off
+until an Admin turns them on. `GET /v1/mesh` still never enables.
+
+```bash
+python -m qnm doctor --data-dir /tmp/qnm-a --profile alpha
+python -m qnm doctor --data-dir /tmp/qnm-a --profile beta
+python -m qnm serve --port 8891 --data-dir /tmp/qnm-a --profile alpha
+python -m qnm serve --port 8892 --data-dir /tmp/qnm-a --profile beta --relay http://127.0.0.1:8893
+```
+
+`--relay` sets outbound relay URLs. It does not turn on relay hosting.
+Mesh payloads stay end-to-end encrypted; that cannot be switched off.
+Two-hop routing, a Tor SOCKS adapter, peer quarantine, and island mode
+are Admin opts, default off. Design mode for the three user domains is
+loopback plus a handle-key unlock; a remote peer is refused. Publish
+fails closed when a local ethics model is absent. `GET` does not enable
+any of these. See [docs/FED-MESH-1.0.md](docs/FED-MESH-1.0.md).
+The passphrase, when used, is `QNM_NODE_PASSPHRASE` in the environment,
+never an argument.
+
 `python -m qnm serve` is the **one local door** (127.0.0.1:8891).
 `python -m qnsd serve` is an extra operator door and needs
 `--operator-extra-door` (still loopback-only). See
@@ -181,6 +206,7 @@ Local API binds **127.0.0.1:8891** only:
 | `GET /local/redline` | REDLINE-1.0 checklist |
 | `POST /local/shelf` | Operator-key cold-shelf wrap / signed restore (no invented key) |
 | `POST /local/export` | Fold + export; non-local plaintext refuses without operator flag + TLS |
+| `GET/POST /local/fedmesh` | Local-first edge mesh (handles, objects, tasks). Opt-in relay, direct, LAN, and edge stay off until an Admin POST. `GET` does not enable them. See [docs/FED-MESH-1.0.md](docs/FED-MESH-1.0.md) |
 
 `qnsd` engine paths (`POST /local/policy`, `POST /local/declare`) stay
 on the qnm door. A second `qnsd` HTTP listen needs
