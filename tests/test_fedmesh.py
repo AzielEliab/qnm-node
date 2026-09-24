@@ -110,6 +110,7 @@ def test_handle_matches_key_and_author_stays(tmp_path: Path) -> None:
     blob = json.dumps(node.snapshot())
     assert "sign_seed" not in blob
     assert "box_seed" not in blob
+    node.boot()
     boot = node.receipts()[0]
     from qnm.fedmesh.secwire import verify_identity_anchor
     from qnm.nolie import receipt_digest
