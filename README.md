@@ -1,28 +1,48 @@
 # qnm-node
 
-Local **Quantum Node Mesh** process from **[QNM-BUILD-1.0](docs/QNM-BUILD-1.0.md)**
-with **[AIH-WP-1.3](docs/AIH-WP-1.3.md)** Spiderweb Pair-Bind
-(medium-independent) and **[QNS-CD-1.0](docs/QNS-CD-1.0.md)** local
-`qnsd` (photon packet; vias in one program). Hub / Interface law
-remains **AIH-WP-1.1**.
+A local node on this machine. The page and the commands stay on 127.0.0.1.
 
-**Author:** Aziel Eliab only
-**Date:** September 2026 · v1.6.0
+**Author:** Aziel Eliab
 **License:** [Apache-2.0](LICENSE)
-**Spec:** QNM-BUILD-1.0 · AIH-WP-1.3 · QNS-CD-1.0 · FABRIC-MESH-PIPELINE-1.0
 
-> Fabric enable is Channels-ON: the software path is allowed.
-> Cellular / Wi-Fi / BT / GNSS / NFC stamp **LIVE | ABSENT | REFUSED**
-> from real OS probes — never mock chatter. Receipts to disk. Poison
-> refused, not interpreted. Pair-id outlives the path. Waiting is
-> not death. GET /v1/mesh never enables.
+## Start
+
+1. Install
+
+```bash
+python -m venv .venv
+source .venv/bin/activate
+pip install -e .
+```
+
+2. Start the local page
+
+```bash
+qnm-node serve
+```
+
+3. Open http://127.0.0.1:8891/local/ui
+
+`qnm-node` prints a short status and that same address.
+`qnm-node --help` lists commands.
+`qnm-node doctor` prints a plain check.
+`qnm-node state --json` prints the machine snapshot.
+`qnm-node ui` is the same start as `qnm-node serve`.
+
+A browser gets the local page. A client that sends `Accept: application/json` gets JSON.
+`python -m qnm` is the same program as `qnm-node`.
 
 **Forks are welcome and always allowed.**
 
-This is a **local node**. It is not AZHub, not AZInterface, not the
-hosted suite mesh, and not AnonBroadcast as a Softwares-tab product.
-Local **qnsd owns vias**. Suite Workers **cite / proxy only**.
-`GET /v1/mesh` **never enables**. There is **no Node Gate**.
+## Notes
+
+**Date:** September 2026 · v1.6.0
+**Spec:** [QNM-BUILD-1.0](docs/QNM-BUILD-1.0.md) · [AIH-WP-1.3](docs/AIH-WP-1.3.md) · [QNS-CD-1.0](docs/QNS-CD-1.0.md) · FABRIC-MESH-PIPELINE-1.0
+
+The local door listens on 127.0.0.1. Fabric enable turns the software path on.
+Cellular, Wi-Fi, Bluetooth, GNSS, and NFC stamp LIVE, ABSENT, or REFUSED from the OS probes on this machine.
+Receipts go to disk. Poison is refused before it is interpreted.
+`GET /v1/mesh` leaves radios and mesh off.
 
 ## Honest scope
 
@@ -39,10 +59,10 @@ phone / watch / radio / bluetooth), an internal bitmesh geohash plane
 (ingress → APG → tip/dwell/claim strangers → walker → translate →
 outbox → cold-copy / phoenix / reheal / re-expand).
 
-**THIS IS NOT:** a VPN, a live radio mesh, Lumen, Mandible,
+**Recorded limits:** VPN service, live radio mesh, Lumen, Mandible,
 `lattice_online`, `mesh_complete`, an account system, a publish path,
-Bell-pair physics, a qubit machine, a public `qnsd` proxy, a Node Gate,
-or a call into AZ Generator.
+Bell-pair physics, a qubit machine, a public `qnsd` proxy, Node Gate,
+and calls into AZ Generator stay outside this process.
 
 ### REAL vs LIVE / ABSENT / REFUSED vs LAW
 
@@ -126,15 +146,16 @@ COLD → LOCAL → LIVE(operator bearer) → DEGRADED → ISOLATED → PHOENIX_L
 No auto-heal. No LIVE from a site ping. Phoenix does not restore a
 public hostname, `.uk`, tunnel, or Worker rollup.
 
-## Quick start
+## Another instance
+
+The three steps above open the local page. Tests use the dev extra:
 
 ```bash
-python -m venv .venv && source .venv/bin/activate && pip install -e ".[dev]"
-python -m qnm doctor
-python -m qnm boot
-python -m qnm serve
-python -m qnsd doctor
+pip install -e ".[dev]"
+python -m pytest -q
 ```
+
+`qnm-node doctor` checks this install. `python -m qnsd doctor` checks the sibling signal process.
 
 Local-first edge mesh ([docs/FED-MESH-1.0.md](docs/FED-MESH-1.0.md)):
 each process keeps its own handle (`#` + 11 Crockford base32 chars of the signing
@@ -161,7 +182,7 @@ any of these. See [docs/FED-MESH-1.0.md](docs/FED-MESH-1.0.md).
 The passphrase, when used, is `QNM_NODE_PASSPHRASE` in the environment,
 never an argument.
 
-`python -m qnm serve` is the **one local door** (127.0.0.1:8891).
+`qnm-node serve` is the **one local door** (127.0.0.1:8891). It prints `Open http://127.0.0.1:8891/local/ui`.
 `python -m qnsd serve` is an extra operator door and needs
 `--operator-extra-door` (still loopback-only). See
 [docs/ATTACK-SURFACE-1.0.md](docs/ATTACK-SURFACE-1.0.md) and
