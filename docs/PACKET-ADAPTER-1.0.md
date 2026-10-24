@@ -29,12 +29,18 @@ not open the awareness socket on `0.0.0.0`.
 | QNM chain hash and `receipt_digest` | **implemented**, frozen |
 | Handle, `key_id`, `install_root`, `pair_id` | **implemented**, frozen |
 | Lock-backed visible outbox | **implemented**. Not the QueueStore below |
-| `PacketEnvelope`, `TransportAdapter`, `HopReceipt`, `DeliveryAck`, `QueueStore`, `PeerDirectory`, route planner | **specified** here. Not implemented in the Phase 0 freeze |
-| Authenticated cross-host LAN (`lan-tls`) | **planned** |
-| UDP discovery as a data path, BLE, NAT, optical, adaptive multipath, RF bands | **planned** or out of scope. Not this contract's implementation |
+| `PacketEnvelope`, `TransportAdapter`, `HopReceipt`, `DeliveryAck`, `QueueStore`, `PeerDirectory`, route planner | **partial**. `qnsd/lan` implements them for `lan-tls` only. The via walker is unchanged |
+| Authenticated cross-host LAN (`lan-tls`) | **partial**. Opt-in TLS 1.3 listener, default off. Loopback tests pass. Two physical hosts have not been run. `live` stays false. Procedure: [LAN-TWO-HOST-1.0](LAN-TWO-HOST-1.0.md) |
+| UDP discovery as a data path, BLE, NAT, optical, adaptive multipath, RF bands | **planned** or out of scope. Not this adapter |
 
 A passing unit test is not a two-host delivery. `GET /v1/mesh` never
 enables. No quantum-entanglement claim. QNS names the packet.
+
+Phase 1 code lives in `qnsd/lan/`. The operator entry point is
+`python scripts/qns_lan.py` (it imports `qnm` before `qnsd`).
+`python -m qnsd.lan` still hits the pre-existing boot/vias import
+cycle and is not a listen. The HTTP door is still `127.0.0.1` only.
+This adapter does not set `live` from CI or from one machine.
 
 ## 1. Audit (code, not the older prose)
 
