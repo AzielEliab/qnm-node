@@ -7,9 +7,11 @@
 is on aziel-runtime `main` (it was not, when this draft was first
 written). This process still does not claim the Worker speaks this
 draft, and it does not open the runtime awareness socket on
-`0.0.0.0`. Cross-host LAN HTTP is **planned**
-([PACKET-ADAPTER-1.0](PACKET-ADAPTER-1.0.md)); it is not implemented
-in the Phase 0 freeze.
+`0.0.0.0`. The HTTP door is still not a cross-host path. A separate
+opt-in TLS listener is **partial**
+([PACKET-ADAPTER-1.0](PACKET-ADAPTER-1.0.md),
+[LAN-TWO-HOST-1.0](LAN-TWO-HOST-1.0.md)): default off, operator-selected
+address, `live` false. Two physical hosts have not been run.
 
 Lamb Lens holds under every flag below. **Service:** a participant is
 a handle, messages can be delivered, tasks run locally. **Clarity:**
@@ -363,15 +365,15 @@ Alignment points:
 9. The default relay URL is the Worker origin. This daemon does not claim the Worker speaks this draft.
 10. Ref update fields: `v`, `kind=ref`, `author`, `handle`, `key_id`, `sign_pub`, `ref`, `object` (64 hex), `prev`, `seq`, `utc`, `hash`, `sig`.
 11. Fetch request: `kind=fetch`, `from`, `key_id`, `sign_pub`, `object`, `utc`, `sig`. The response is a normal `msg` envelope whose plaintext is `{kind:object, object, content_b64}` inside ciphertext only.
-12. NAT traversal is not implemented. Relay listen is 127.0.0.1 only. Cross-host neighborhood HTTP is not implemented; cluster URLs in tests are other loopback ports.
+12. NAT traversal is not implemented. Relay listen is 127.0.0.1 only. Cross-host neighborhood HTTP is not implemented; cluster URLs in tests are other loopback ports. `qnsd/lan` is a different socket (TLS 1.3, default port 8894, default off). It is partial, not LIVE.
 
 ## Limits (plain)
 
 - No anonymity. Handles and routing metadata are visible to relays.
 - No forward secrecy.
-- No NAT traversal and no cross-machine LAN HTTP. Neighborhood delivery
-  here is loopback between instances, plus opt-in UDP that defaults to
-  127.0.0.1.
+- No NAT traversal. Neighborhood HTTP in this daemon is loopback
+  between instances, plus opt-in UDP that defaults to 127.0.0.1.
+  The separate `qnsd/lan` listener is partial and does not report LIVE.
 - No Bluetooth mesh transport, no mDNS, no tested radio link.
 - No hypervisor sandbox. Same-UID ptrace is out of scope.
 - Replication is two copies, not a quorum. A single-homed message dies

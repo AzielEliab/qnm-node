@@ -238,9 +238,11 @@ Offline. pytest. No invented hardware.
 ## Status (2026-10-24)
 
 Photon identity and the via walk in this paper are **implemented** and
-frozen. The authenticated cross-host LAN adapter is **planned**
-([PACKET-ADAPTER-1.0](PACKET-ADAPTER-1.0.md)). This pipeline does not
-gain a WAN listen.
+frozen. The authenticated cross-host LAN adapter is **partial**
+([PACKET-ADAPTER-1.0](PACKET-ADAPTER-1.0.md),
+[LAN-TWO-HOST-1.0](LAN-TWO-HOST-1.0.md)). It is not in `VIA_ORDER`.
+This pipeline does not gain a WAN listen. `live` on that adapter
+stays false.
 
 ## Cite
 

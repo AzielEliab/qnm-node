@@ -13,14 +13,22 @@ Public identity is **Aziel Eliab** only.
 | Process | Bind | Port | Default | Public | Role |
 | --- | --- | --- | --- | --- | --- |
 | `qnm` | `127.0.0.1` | 8891 | **yes** | no | local control plane |
-| `qnsd` | `127.0.0.1` | 8891 | **no** (`--operator-extra-door`) | no | extra operator door |
+| `qnsd` HTTP | `127.0.0.1` | 8891 | **no** (`--operator-extra-door`) | no | extra operator door |
+| `qnsd` lan-tls | operator-selected IPv4 | 8894 | **no** (`enabled` default false) | no | opt-in TLS 1.3. Not the HTTP door. `live` stays false |
 
-WAN (`0.0.0.0`, `::`, `*`) refuses. `localhost` is remapped to
-`127.0.0.1`. Remote TLS is operator kit, not a default listen.
+WAN (`0.0.0.0`, `::`, `*`) refuses on every row. `localhost` on the
+HTTP door is remapped to `127.0.0.1`. The LAN row refuses `0.0.0.0`,
+public addresses, CGNAT, `192.0.2.0/24`, and `198.18.0.0/15`. Loopback
+on that row needs `--loopback`. A non-loopback LAN bind is Linux-only
+(`/sys/class/net` and `SIOCGIFADDR`). macOS and Windows fail closed:
+only the explicit loopback opt-in can bind. Remote TLS for the HTTP
+door is operator kit, not a default listen.
 
-A separate authenticated LAN listener is **planned**
-([PACKET-ADAPTER-1.0](PACKET-ADAPTER-1.0.md)). It is not bound by this
-freeze. The HTTP rows above are the listens that exist.
+The LAN listener is **partial**
+([PACKET-ADAPTER-1.0](PACKET-ADAPTER-1.0.md),
+[LAN-TWO-HOST-1.0](LAN-TWO-HOST-1.0.md)). It is a different socket
+from the HTTP rows. It is not bound unless the operator starts it.
+Two physical hosts have not been run.
 
 ## Public vs local API
 

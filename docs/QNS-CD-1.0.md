@@ -233,7 +233,7 @@ File: `tests/test_qnsd.py`. Offline. pytest.
 | --- | --- |
 | Photon identity, `VIA_ORDER`, walker, outbox wait, pair cut | **implemented**. Frozen by [PACKET-ADAPTER-1.0](PACKET-ADAPTER-1.0.md) and `tests/test_contract_freeze.py` |
 | `lan` via as a declared software class | **implemented**. Emit does not send bytes |
-| Authenticated cross-host LAN adapter | **planned** |
+| Authenticated cross-host LAN adapter | **partial**. `qnsd/lan`, opt-in, `live` false. Two physical hosts not run. [LAN-TWO-HOST-1.0](LAN-TWO-HOST-1.0.md) |
 | `GET /v1/mesh` never enables. No entanglement claim | **implemented** as a refusal, not a transport |
 
 ## Cite

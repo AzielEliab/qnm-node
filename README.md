@@ -43,6 +43,7 @@ The local door listens on 127.0.0.1. Fabric enable turns the software path on.
 Cellular, Wi-Fi, Bluetooth, GNSS, and NFC stamp LIVE, ABSENT, or REFUSED from the OS probes on this machine.
 Receipts go to disk. Poison is refused before it is interpreted.
 `GET /v1/mesh` leaves radios and mesh off.
+An opt-in LAN TLS listener is a different socket, binds only an address you choose, and does not report LIVE. See [docs/LAN-TWO-HOST-1.0.md](docs/LAN-TWO-HOST-1.0.md).
 
 ## Honest scope
 
