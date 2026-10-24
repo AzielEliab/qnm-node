@@ -3,9 +3,13 @@
 **Author:** Aziel Eliab only
 **Software:** qnm-node
 **Wire module:** `qnm/fedmesh/wire.py`
-**Status:** daemon draft. `docs/designs/FED-MESH-1.0.md` is not on
-aziel-runtime `main`. This process does not claim the Worker speaks
-this draft.
+**Status:** daemon draft. On 2026-10-24 `docs/designs/FED-MESH-1.0.md`
+is on aziel-runtime `main` (it was not, when this draft was first
+written). This process still does not claim the Worker speaks this
+draft, and it does not open the runtime awareness socket on
+`0.0.0.0`. Cross-host LAN HTTP is **planned**
+([PACKET-ADAPTER-1.0](PACKET-ADAPTER-1.0.md)); it is not implemented
+in the Phase 0 freeze.
 
 Lamb Lens holds under every flag below. **Service:** a participant is
 a handle, messages can be delivered, tasks run locally. **Clarity:**
@@ -341,8 +345,11 @@ are not changed here.
 
 ## Open alignment with aziel-runtime
 
-The runtime spec was not on `main` when this draft was written. The
-wire format lives in `qnm/fedmesh/wire.py` so it can move later.
+The runtime spec was not on `main` when this draft was written. It is
+on `main` as of 2026-10-24. The wire format that this daemon runs
+still lives in `qnm/fedmesh/wire.py`. This freeze does not retarget
+it. The runtime paper's `0.0.0.0` awareness bind is not a listen this
+process opens.
 Alignment points:
 
 1. Refs, anchors, and most daemon objects stay `FED-MESH-1.0-draft`. Message envelopes and isolation records use `FED-MESH-1.0`.

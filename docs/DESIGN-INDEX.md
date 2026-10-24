@@ -21,6 +21,8 @@ Companion to `QNM-BUILD-1.0.md` and `AIH-WP-1.3.md`.
 | [ATTACK-SURFACE-1.0](./ATTACK-SURFACE-1.0.md) | Listen map; qnm is THE local door; WAN refused; qnsd HTTP is extra-door |
 | [REDLINE-1.0](./REDLINE-1.0.md) | Auth / token-never-in-git / mesh GET never enables / AZ Generator not callable / radio LIVE only on presence / poison refuse / no rewrite |
 | [FED-MESH-1.0](./FED-MESH-1.0.md) | Local-first edge mesh on this daemon: per-handle keys, ciphertext shares, cluster-before-relay, content-addressed refs. Draft wire; not a claim that the runtime Worker speaks it |
+| [PACKET-ADAPTER-1.0](./PACKET-ADAPTER-1.0.md) | Frozen photon identity and the versioned PacketEnvelope / TransportAdapter contract. LAN transport **planned** |
+| [THREAT-MODEL-1.0](./THREAT-MODEL-1.0.md) | Malicious peer, relay, key, replay, spoof, loss, disk, clock, storage, DoS, theft — detected, prevented, out of scope |
 
 QNM-WP-1.0 absorbs BUILD+TOPO: local process ON, public rollup OFF and
 dies with the pull; GET /v1/mesh never enables. Phoenix is wait /

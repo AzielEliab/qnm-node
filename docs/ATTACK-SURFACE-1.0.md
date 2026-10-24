@@ -18,6 +18,10 @@ Public identity is **Aziel Eliab** only.
 WAN (`0.0.0.0`, `::`, `*`) refuses. `localhost` is remapped to
 `127.0.0.1`. Remote TLS is operator kit, not a default listen.
 
+A separate authenticated LAN listener is **planned**
+([PACKET-ADAPTER-1.0](PACKET-ADAPTER-1.0.md)). It is not bound by this
+freeze. The HTTP rows above are the listens that exist.
+
 ## Public vs local API
 
 **Public API:** none. Faces do not proxy this port.

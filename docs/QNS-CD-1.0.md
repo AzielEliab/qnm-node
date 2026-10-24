@@ -227,6 +227,15 @@ No `/mesh` enable. No Node Gate. Faces do not proxy this port.
 
 File: `tests/test_qnsd.py`. Offline. pytest.
 
+## Status (2026-10-24)
+
+| Piece | Status |
+| --- | --- |
+| Photon identity, `VIA_ORDER`, walker, outbox wait, pair cut | **implemented**. Frozen by [PACKET-ADAPTER-1.0](PACKET-ADAPTER-1.0.md) and `tests/test_contract_freeze.py` |
+| `lan` via as a declared software class | **implemented**. Emit does not send bytes |
+| Authenticated cross-host LAN adapter | **planned** |
+| `GET /v1/mesh` never enables. No entanglement claim | **implemented** as a refusal, not a transport |
+
 ## Cite
 
 Eliab, Aziel. (2026). QNS-CD-1.0 Quantum Node Signal Coding Design
