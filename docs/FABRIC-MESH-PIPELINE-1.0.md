@@ -235,6 +235,13 @@ Existing `tests/test_qnsd.py` remains QNS-CD-1.0 §14.
 
 Offline. pytest. No invented hardware.
 
+## Status (2026-10-24)
+
+Photon identity and the via walk in this paper are **implemented** and
+frozen. The authenticated cross-host LAN adapter is **planned**
+([PACKET-ADAPTER-1.0](PACKET-ADAPTER-1.0.md)). This pipeline does not
+gain a WAN listen.
+
 ## Cite
 
 Eliab, Aziel. (2026). FABRIC-MESH-PIPELINE-1.0 local fabric mesh
