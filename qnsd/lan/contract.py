@@ -26,11 +26,13 @@ MAX_QUEUE_ITEMS = 64
 MAX_QUEUE_BYTES = 1_048_576
 MAX_INFLIGHT = 8
 MAX_CONN_PER_IP = 4
+MAX_CONN_TOTAL = 16
 MAX_MESSAGES = 30
 MESSAGE_WINDOW_S = 60.0
 HANDSHAKE_TIMEOUT_S = 5.0
 READ_TIMEOUT_S = 10.0
 REASSEMBLY_TIMEOUT_S = 30.0
+SESSION_DEADLINE_S = 60.0
 CLOCK_SKEW_S = 120
 RETRY_BUDGET = 8
 RETRY_BASE_S = 1.0
@@ -84,10 +86,12 @@ class LanRefuse(QNSRefuse):
         *,
         outcome: str = "refused",
         security: bool = True,
+        transport_accepted: bool = False,
     ) -> None:
         super().__init__(code, detail)
         self.outcome = outcome
         self.security = security
+        self.transport_accepted = bool(transport_accepted)
 
 
 @dataclass

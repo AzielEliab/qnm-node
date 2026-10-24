@@ -115,6 +115,20 @@ class PeerDirectory:
             hosts.add(host)
         return hosts
 
+    def approved_host_set(self) -> set[str]:
+        """Source addresses allowed to start TLS. Active pins only."""
+        hosts: set[str] = set()
+        for row in self.peers.values():
+            if row.get("key_status") != "active":
+                continue
+            for address in row.get("addresses") or []:
+                try:
+                    host, _port = parse_ip_port(str(address))
+                except LanRefuse:
+                    continue
+                hosts.add(host)
+        return hosts
+
     def _save(self) -> None:
         text = json.dumps(self.peers, sort_keys=True, indent=2) + "\n"
         tmp = self.path.with_suffix(".json.tmp")

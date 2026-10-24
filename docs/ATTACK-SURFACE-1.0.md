@@ -18,8 +18,11 @@ Public identity is **Aziel Eliab** only.
 
 WAN (`0.0.0.0`, `::`, `*`) refuses on every row. `localhost` on the
 HTTP door is remapped to `127.0.0.1`. The LAN row refuses `0.0.0.0`,
-public addresses, and CGNAT. Loopback on that row needs `--loopback`.
-Remote TLS for the HTTP door is operator kit, not a default listen.
+public addresses, CGNAT, `192.0.2.0/24`, and `198.18.0.0/15`. Loopback
+on that row needs `--loopback`. A non-loopback LAN bind is Linux-only
+(`/sys/class/net` and `SIOCGIFADDR`). macOS and Windows fail closed:
+only the explicit loopback opt-in can bind. Remote TLS for the HTTP
+door is operator kit, not a default listen.
 
 The LAN listener is **partial**
 ([PACKET-ADAPTER-1.0](PACKET-ADAPTER-1.0.md),

@@ -11,6 +11,7 @@ import socket
 import ssl
 import stat
 import threading
+import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
@@ -26,12 +27,15 @@ from qnsd.lan.contract import (
     DEFAULT_PORT,
     ENC_ALG,
     HANDSHAKE_TIMEOUT_S,
+    MAX_CONN_PER_IP,
+    MAX_CONN_TOTAL,
     MAX_FRAGMENT,
     MAX_NONCES,
     MIN_FRAGMENT,
     NONCE_BYTES,
     PACKET_V,
     SESSION_ALG,
+    SESSION_DEADLINE_S,
     LanRefuse,
     SendResult,
 )
@@ -40,7 +44,7 @@ from qnsd.lan.peers import PeerDirectory
 from qnsd.lan.queue import QueueStore, new_item
 from qnsd.lan.receipts import HopReceipts
 from qnsd.lan.router import RoutePlanner
-from qnsd.lan.session import client_handshake, result_from, send_envelope, serve_connection
+from qnsd.lan.session import client_handshake, handshake_drop, result_from, send_envelope, serve_connection
 from qnsd.lan.tlsutil import client_context, ensure_cert, server_context
 from qnsd.photon import make_photon, photon_id
 
@@ -134,6 +138,7 @@ class LanNode:
         self._reachable = False
         self._loopback = False
         self._conns: dict[str, int] = {}
+        self._conn_lock = threading.Lock()
         self._nonces: list[str] = []
         self._nonce_path = self.root / "data" / "lan" / "nonces.json"
         self._log_path = self.root / "data" / "lan" / "log.jsonl"
@@ -306,7 +311,12 @@ class LanNode:
             result = self._exchange(peer, envelope)
         except LanRefuse as exc:
             self._note_failure(packet_id, payload_hash, envelope, exc)
-            return result_from(exc, packet_id=packet_id, payload_hash=payload_hash, transport_accepted=exc.outcome != "absent")
+            return result_from(
+                exc,
+                packet_id=packet_id,
+                payload_hash=payload_hash,
+                transport_accepted=bool(exc.transport_accepted),
+            )
         if result.ack_level == "stored":
             self._note_stored(envelope)
             self.queue.mark(packet_id, state="done", outcome="ok", code="")
@@ -388,6 +398,13 @@ class LanNode:
         Outstanding queued envelopes count, so two packets sealed before
         either is stored do not reuse seq 1. The receiver still accepts
         them only in order.
+
+        A later packet sealed while an earlier one is still queued uses
+        that earlier envelope as ``prev``. If the earlier one is then
+        refused, the receiver never stores it. Each attempt of the later
+        packet is ``FED-GAP`` (temporary) until the retry budget is spent
+        (``QNS-LAN-RETRY``). That delay is not a silent drop of the later
+        packet on the first refusal, and it does not rewrite ``prev``.
         """
         seq, prev = self.ledger.tip(self.handle)
         for item in self.queue.items:
@@ -468,19 +485,38 @@ class LanNode:
         except OSError as exc:
             raise LanRefuse("QNS-LAN-UNAVAILABLE", "peer unavailable", outcome="temporary", security=False) from exc
         raw.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+        deadline = time.monotonic() + SESSION_DEADLINE_S
+        raw.settimeout(HANDSHAKE_TIMEOUT_S)
         try:
             tls = client_context(self.cert_path, self.key_path, str(peer["cert_pem"])).wrap_socket(
                 raw, server_hostname=host
             )
-        except ssl.SSLError as exc:
+        except Exception as exc:
             raw.close()
-            raise LanRefuse("QNS-LAN-IDENTITY", "tls peer authentication failed", outcome="refused", security=True) from exc
-        tls.settimeout(HANDSHAKE_TIMEOUT_S)
+            dropped = handshake_drop(exc)
+            if dropped is not None:
+                raise dropped from exc
+            if isinstance(exc, ssl.SSLError):
+                raise LanRefuse(
+                    "QNS-LAN-IDENTITY",
+                    "tls peer authentication failed",
+                    outcome="refused",
+                    security=True,
+                ) from exc
+            raise
         try:
-            client_handshake(tls, self, peer)
+            try:
+                client_handshake(tls, self, peer, deadline)
+            except LanRefuse:
+                raise
+            except Exception as exc:
+                dropped = handshake_drop(exc)
+                if dropped is not None:
+                    raise dropped from exc
+                raise
             self.mark_session(True)
             try:
-                return send_envelope(tls, self, peer, envelope)
+                return send_envelope(tls, self, peer, envelope, deadline)
             finally:
                 self.mark_session(False)
         finally:
@@ -552,27 +588,91 @@ class LanNode:
             except OSError:
                 return
             source = str(addr[0])
-            count = self._conns.get(source, 0)
-            if count >= 4:
+            if source not in self.peers.approved_host_set():
+                conn.close()
+                self.log(event="refuse", code="QNS-LAN-REFUSED", outcome="refused", security=True)
+                continue
+            if not self._admit_conn(source):
                 conn.close()
                 self.log(event="refuse", code="QNS-LAN-QUOTA", outcome="refused", security=True)
                 continue
-            self._conns[source] = count + 1
-            threading.Thread(target=self._serve, args=(conn, source), daemon=True).start()
+            try:
+                threading.Thread(
+                    target=self._serve,
+                    args=(conn, source),
+                    name="qns-lan-conn",
+                    daemon=True,
+                ).start()
+            except Exception:
+                self._release_conn(source)
+                conn.close()
+                raise
+
+    def _admit_conn(self, source: str) -> bool:
+        """Reserve one connection thread. ``MAX_CONN_PER_IP`` and ``MAX_CONN_TOTAL``."""
+        with self._conn_lock:
+            total = sum(self._conns.values())
+            if total >= MAX_CONN_TOTAL or self._conns.get(source, 0) >= MAX_CONN_PER_IP:
+                return False
+            self._conns[source] = self._conns.get(source, 0) + 1
+            return True
+
+    def _release_conn(self, source: str) -> None:
+        with self._conn_lock:
+            left = self._conns.get(source, 0) - 1
+            if left <= 0:
+                self._conns.pop(source, None)
+            else:
+                self._conns[source] = left
+
+    def connection_count(self) -> int:
+        with self._conn_lock:
+            return sum(self._conns.values())
 
     def _serve(self, conn: socket.socket, source: str) -> None:
+        deadline = time.monotonic() + SESSION_DEADLINE_S
         try:
+            if source not in self.peers.approved_host_set():
+                self.log(event="refuse", code="QNS-LAN-REFUSED", outcome="refused", security=True)
+                conn.close()
+                return
+            conn.settimeout(HANDSHAKE_TIMEOUT_S)
             pems = [str(row["cert_pem"]) for row in self.peers.active()]
             try:
                 ctx = server_context(self.cert_path, self.key_path, pems)
                 tls = ctx.wrap_socket(conn, server_side=True)
-            except (LanRefuse, ssl.SSLError, OSError):
-                self.log(event="refuse", code="QNS-LAN-IDENTITY", outcome="refused", security=True)
-                conn.close()
+            except LanRefuse as exc:
+                self.log(event="refuse", code=exc.code, outcome=exc.outcome, security=exc.security)
+                try:
+                    conn.close()
+                except OSError:
+                    pass
                 return
-            serve_connection(tls, self, source)
+            except Exception as exc:
+                dropped = handshake_drop(exc)
+                if dropped is not None:
+                    self.log(
+                        event="refuse",
+                        code=dropped.code,
+                        outcome=dropped.outcome,
+                        security=False,
+                    )
+                else:
+                    self.log(event="refuse", code="QNS-LAN-IDENTITY", outcome="refused", security=True)
+                try:
+                    conn.close()
+                except OSError:
+                    pass
+                return
+            try:
+                serve_connection(tls, self, source, deadline)
+            finally:
+                try:
+                    tls.close()
+                except OSError:
+                    pass
         finally:
-            self._conns[source] = max(0, self._conns.get(source, 1) - 1)
+            self._release_conn(source)
 
     def _load_nonces(self) -> None:
         if self._nonce_path.is_file():

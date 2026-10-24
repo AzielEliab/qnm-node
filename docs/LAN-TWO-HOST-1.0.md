@@ -21,7 +21,8 @@ point the nodes at the same data directory. Do not call a relay.
 - This repo at the same commit on both. Record `git rev-parse HEAD`.
 - Python 3.10+ and `pip install -e ".[dev]"`.
 - Each machine's own data directory, empty at the start.
-- An interface address you choose, for example `192.168.1.10` on A and `192.168.1.20` on B. Not `0.0.0.0`. Not a public address.
+- An interface address you choose, for example `192.168.1.10` on A and `192.168.1.20` on B. Not `0.0.0.0`. Not a public address. Not `192.0.2.0/24` and not `198.18.0.0/15`.
+- Linux for a non-loopback bind. The assigned-address check reads `/sys/class/net` and `SIOCGIFADDR`. macOS and Windows fail closed and can bind only with the explicit loopback opt-in, which is still not a two-host proof and still leaves `live` false.
 
 The CLI is `python scripts/qns_lan.py`. It imports `qnm` before
 `qnsd`. `python -m qnsd.lan` hits a pre-existing import cycle and is
@@ -117,6 +118,7 @@ and which this step repeats on the LAN:
 | --- | --- |
 | Same payload again | `stored`, same `packet_id`, no second seq, no second inbox file |
 | Second packet delivered before the first | `FED-GAP`, temporary, not stored. After the first is stored, the second stores |
+| Earlier packet already sealed, then permanently refused | The later packet keeps that `prev`. Each attempt is `FED-GAP` (temporary) until the retry budget becomes `QNS-LAN-RETRY`. The first refusal does not drop the later packet, and it does not rewrite `prev` |
 | Flipped signature | `QNS-LAN-REFUSED`, security, empty inbox |
 | `expiry_utc` in the past, re-signed | `QNS-LAN-EXPIRED`, permanent, security |
 | Same `packet_id`, different `payload_hash` | `QNS-LAN-FORK`, security |

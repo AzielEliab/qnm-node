@@ -1,4 +1,13 @@
-"""Operator-selected bind. Never 0.0.0.0. Never a public address."""
+"""Operator-selected bind. Never 0.0.0.0. Never a public address.
+
+Non-loopback binds are Linux-only. The assigned-address check reads
+``/sys/class/net`` and ``SIOCGIFADDR``. macOS and Windows do not expose
+that, so the local set stays ``{127.0.0.1}`` and any other address
+fails closed with ``QNS-LAN-BIND``.
+
+``192.0.2.0/24`` (TEST-NET-1) and ``198.18.0.0/15`` (benchmarking) are
+refused for bind and for peer addresses.
+"""
 
 from __future__ import annotations
 
@@ -12,6 +21,10 @@ from qnsd.lan.contract import LanRefuse
 
 _SIOCGIFADDR = 0x8915
 _REFUSE_TOKENS = frozenset({"", "0.0.0.0", "::", "[::]", "*", "localhost"})
+_DOC_NETS = (
+    ipaddress.ip_network("192.0.2.0/24"),
+    ipaddress.ip_network("198.18.0.0/15"),
+)
 
 
 def interface_ipv4(name: str) -> str | None:
@@ -110,6 +123,14 @@ def _parse_ip(token: str) -> ipaddress.IPv4Address | ipaddress.IPv6Address:
 
 
 def _refuse_public(ip: ipaddress.IPv4Address | ipaddress.IPv6Address) -> None:
+    for net in _DOC_NETS:
+        if ip.version == net.version and ip in net:
+            raise LanRefuse(
+                "QNS-LAN-WAN",
+                "documentation address refused",
+                outcome="refused",
+                security=True,
+            )
     if ip.is_loopback or ip.is_private or ip.is_link_local:
         return
     raise LanRefuse("QNS-LAN-WAN", "public bind refused", outcome="refused", security=True)

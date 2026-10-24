@@ -9,6 +9,7 @@ import hashlib
 import json
 import os
 import socket
+import ssl
 import stat
 import time
 from datetime import datetime, timedelta, timezone
@@ -30,6 +31,7 @@ from qnsd.lan.contract import (
     ENC_ALG,
     FORBIDDEN_RECORD_KEYS,
     GENESIS,
+    HANDSHAKE_TIMEOUT_S,
     LAN_V,
     MAX_FRAGMENTS,
     MAX_INFLIGHT,
@@ -165,6 +167,60 @@ class _Rate:
         self.times.append(now)
 
 
+def handshake_drop(exc: BaseException) -> LanRefuse | None:
+    """A dropped handshake is temporary. A bad certificate is not.
+
+    ``SSLEOFError`` and ``ConnectionResetError`` are peer drops.
+    ``security`` stays false so the queue can retry. Certificate and
+    pin failures return ``None`` and the caller keeps them as refusals.
+    """
+    if isinstance(exc, TimeoutError):
+        return LanRefuse(
+            "QNS-LAN-TIMEOUT",
+            "handshake timed out",
+            outcome="temporary",
+            security=False,
+        )
+    if isinstance(exc, (ssl.SSLEOFError, ConnectionResetError, BrokenPipeError)):
+        return LanRefuse(
+            "QNS-LAN-UNAVAILABLE",
+            "peer dropped the handshake",
+            outcome="temporary",
+            security=False,
+        )
+    if isinstance(exc, ssl.SSLError) and "timed out" in str(exc).lower():
+        return LanRefuse(
+            "QNS-LAN-TIMEOUT",
+            "handshake timed out",
+            outcome="temporary",
+            security=False,
+        )
+    return None
+
+
+def require_ack_level(seen: list[str], level: str) -> None:
+    """Acks arrive received, then verified, then stored."""
+    if len(seen) >= len(ACK_LEVELS) or ACK_LEVELS[len(seen)] != level:
+        raise LanRefuse(
+            "QNS-LAN-MALFORMED",
+            "ack level out of order",
+            outcome="permanent",
+            security=True,
+        )
+
+
+def _arm(sock: socket.socket, deadline: float, cap: float) -> None:
+    left = deadline - time.monotonic()
+    if left <= 0:
+        raise LanRefuse(
+            "QNS-LAN-TIMEOUT",
+            "session deadline",
+            outcome="temporary",
+            security=False,
+        )
+    sock.settimeout(min(cap, left))
+
+
 def _refusal_from(msg: dict[str, Any], *, expect_handle: str) -> LanRefuse:
     verify_document(msg, signer=str(msg.get("handle") or ""))
     if msg.get("handle") != expect_handle:
@@ -177,8 +233,8 @@ def _refusal_from(msg: dict[str, Any], *, expect_handle: str) -> LanRefuse:
     return LanRefuse(code, "peer refused the packet", outcome=outcome, security=security)
 
 
-def client_handshake(sock: socket.socket, node: Any, peer: dict[str, Any]) -> None:
-    sock.settimeout(READ_TIMEOUT_S)
+def client_handshake(sock: socket.socket, node: Any, peer: dict[str, Any], deadline: float) -> None:
+    _arm(sock, deadline, HANDSHAKE_TIMEOUT_S)
     presented = peer_cert_sha256(sock)
     if presented != peer["cert_sha256"]:
         raise LanRefuse("QNS-LAN-IDENTITY", "certificate pin mismatch", outcome="refused", security=True)
@@ -264,8 +320,8 @@ def _check_responder_hello(
         raise LanRefuse("QNS-LAN-MALFORMED", "responder nonce refused", outcome="permanent", security=True)
 
 
-def server_handshake(sock: socket.socket, node: Any, source_ip: str) -> dict[str, Any]:
-    sock.settimeout(READ_TIMEOUT_S)
+def server_handshake(sock: socket.socket, node: Any, source_ip: str, deadline: float) -> dict[str, Any]:
+    _arm(sock, deadline, HANDSHAKE_TIMEOUT_S)
     presented = peer_cert_sha256(sock)
     hello = read_frame(sock)
     if hello.get("v") != LAN_V or hello.get("kind") != "hello":
@@ -331,84 +387,107 @@ def server_handshake(sock: socket.socket, node: Any, source_ip: str) -> dict[str
     return peer
 
 
-def send_envelope(sock: socket.socket, node: Any, peer: dict[str, Any], envelope: dict[str, Any]) -> SendResult:
+def send_envelope(
+    sock: socket.socket,
+    node: Any,
+    peer: dict[str, Any],
+    envelope: dict[str, Any],
+    deadline: float,
+) -> SendResult:
     packet_id = str(envelope.get("packet_id") or "")
     payload_hash = str(envelope.get("payload_hash") or "")
     raw = canonical(envelope)
     pieces = _split(raw, int(node.max_fragment_bytes))
     node.peers.set_state(peer["handle"], "ELIGIBLE")
-    for index, piece in enumerate(pieces):
-        frag = sign_document(
-            node.sign_private,
-            {
-                "v": LAN_V,
-                "kind": "fragment",
-                "author": AUTHOR,
-                "handle": node.handle,
-                "public_key": node.public_key,
-                "packet_id": packet_id,
-                "payload_hash": payload_hash,
-                "index": index,
-                "count": len(pieces),
-                "total": len(raw),
-                "sha256": sha256_hex(piece),
-                "body_b64": b64e(piece),
-            },
-        )
-        write_frame(sock, frag)
-    node.peers.set_state(peer["handle"], "ATTEMPTED")
-    node.log(
-        event="send",
-        packet_id=packet_id,
-        payload_hash=payload_hash,
-        peer_handle=peer["handle"],
-        fragment_count=len(pieces),
-        nbytes=len(raw),
-        outcome="temporary",
-        code="",
-    )
-    levels: list[str] = []
-    deadline = time.monotonic() + READ_TIMEOUT_S
-    while time.monotonic() < deadline:
-        msg = read_frame(sock)
-        kind = str(msg.get("kind") or "")
-        if kind == "outcome":
-            raise _refusal_from(msg, expect_handle=str(peer["handle"]))
-        if kind != "delivery-ack":
-            raise LanRefuse("QNS-LAN-MALFORMED", "expected an ack", outcome="permanent", security=True)
-        verify_document(msg, signer=str(msg.get("from_handle") or ""))
-        if msg.get("from_handle") != peer["handle"] or msg.get("to_handle") != node.handle:
-            raise LanRefuse("QNS-LAN-IDENTITY", "ack identity mismatch", outcome="refused", security=True)
-        if msg.get("packet_id") != packet_id or msg.get("payload_hash") != payload_hash:
-            raise LanRefuse("QNS-LAN-FORK", "ack does not bind this packet", outcome="refused", security=True)
-        level = str(msg.get("level") or "")
-        if level not in ACK_LEVELS:
-            raise LanRefuse("QNS-LAN-MALFORMED", "ack level refused", outcome="permanent", security=True)
-        levels.append(level)
-        node.log(event="ack", packet_id=packet_id, payload_hash=payload_hash, level=level, peer_handle=peer["handle"], outcome="ok", code="")
-        if level == "stored":
-            node.peers.set_state(peer["handle"], "ACKNOWLEDGED")
-            return SendResult(
-                outcome="ok",
-                code="",
-                security=False,
-                transport_accepted=True,
-                ack_level="stored",
-                packet_id=packet_id,
-                payload_hash=payload_hash,
-                levels=levels,
+    frames_out = False
+    try:
+        for index, piece in enumerate(pieces):
+            frag = sign_document(
+                node.sign_private,
+                {
+                    "v": LAN_V,
+                    "kind": "fragment",
+                    "author": AUTHOR,
+                    "handle": node.handle,
+                    "public_key": node.public_key,
+                    "packet_id": packet_id,
+                    "payload_hash": payload_hash,
+                    "index": index,
+                    "count": len(pieces),
+                    "total": len(raw),
+                    "sha256": sha256_hex(piece),
+                    "body_b64": b64e(piece),
+                },
             )
-    raise LanRefuse("QNS-LAN-TIMEOUT", "stored ack timed out", outcome="temporary", security=False)
+            write_frame(sock, frag)
+        frames_out = True
+        node.peers.set_state(peer["handle"], "ATTEMPTED")
+        node.log(
+            event="send",
+            packet_id=packet_id,
+            payload_hash=payload_hash,
+            peer_handle=peer["handle"],
+            fragment_count=len(pieces),
+            nbytes=len(raw),
+            outcome="temporary",
+            code="",
+        )
+        levels: list[str] = []
+        read_deadline = min(time.monotonic() + READ_TIMEOUT_S, deadline)
+        while time.monotonic() < read_deadline:
+            _arm(sock, read_deadline, READ_TIMEOUT_S)
+            msg = read_frame(sock)
+            kind = str(msg.get("kind") or "")
+            if kind == "outcome":
+                raise _refusal_from(msg, expect_handle=str(peer["handle"]))
+            if kind != "delivery-ack":
+                raise LanRefuse("QNS-LAN-MALFORMED", "expected an ack", outcome="permanent", security=True)
+            verify_document(msg, signer=str(msg.get("from_handle") or ""))
+            if msg.get("from_handle") != peer["handle"] or msg.get("to_handle") != node.handle:
+                raise LanRefuse("QNS-LAN-IDENTITY", "ack identity mismatch", outcome="refused", security=True)
+            if msg.get("packet_id") != packet_id or msg.get("payload_hash") != payload_hash:
+                raise LanRefuse("QNS-LAN-FORK", "ack does not bind this packet", outcome="refused", security=True)
+            level = str(msg.get("level") or "")
+            require_ack_level(levels, level)
+            levels.append(level)
+            node.log(event="ack", packet_id=packet_id, payload_hash=payload_hash, level=level, peer_handle=peer["handle"], outcome="ok", code="")
+            if level == "stored":
+                node.peers.set_state(peer["handle"], "ACKNOWLEDGED")
+                return SendResult(
+                    outcome="ok",
+                    code="",
+                    security=False,
+                    transport_accepted=True,
+                    ack_level="stored",
+                    packet_id=packet_id,
+                    payload_hash=payload_hash,
+                    levels=levels,
+                )
+        raise LanRefuse("QNS-LAN-TIMEOUT", "stored ack timed out", outcome="temporary", security=False)
+    except LanRefuse as exc:
+        if frames_out:
+            exc.transport_accepted = True
+        raise
+    except (ssl.SSLEOFError, ConnectionResetError, BrokenPipeError, TimeoutError) as exc:
+        code = "QNS-LAN-TIMEOUT" if isinstance(exc, TimeoutError) else "QNS-LAN-UNAVAILABLE"
+        raise LanRefuse(
+            code,
+            "peer dropped the session",
+            outcome="temporary",
+            security=False,
+            transport_accepted=frames_out,
+        ) from exc
 
 
-def serve_connection(sock: socket.socket, node: Any, source_ip: str) -> None:
+def serve_connection(sock: socket.socket, node: Any, source_ip: str, deadline: float) -> None:
     rate = _Rate()
     handed = False
     try:
-        peer = server_handshake(sock, node, source_ip)
+        peer = server_handshake(sock, node, source_ip, deadline)
         handed = True
         node.mark_session(True)
         while True:
+            _arm(sock, deadline, REASSEMBLY_TIMEOUT_S)
             rate.bump()
             rate.inflight += 1
             try:
@@ -420,6 +499,14 @@ def serve_connection(sock: socket.socket, node: Any, source_ip: str) -> None:
             _write_outcome(sock, node, "", "", exc)
         if exc.code != "QNS-LAN-UNAVAILABLE":
             node.log(event="refuse", code=exc.code, outcome=exc.outcome, security=exc.security)
+    except (TimeoutError, ssl.SSLEOFError, ConnectionResetError, BrokenPipeError) as exc:
+        dropped = handshake_drop(exc)
+        node.log(
+            event="refuse",
+            code=dropped.code if dropped is not None else "QNS-LAN-UNAVAILABLE",
+            outcome="temporary",
+            security=False,
+        )
     finally:
         node.mark_session(False)
         try:

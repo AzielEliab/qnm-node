@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import socket
+import ssl
 import subprocess
 import sys
 import time
@@ -20,8 +21,11 @@ import qnm  # noqa: F401  — before qnsd, avoids the boot/vias cycle
 from qnm.boot import QNMRefuse
 from qnm.fedmesh.wire import envelope_id
 from qnm.surface import refuse_wan_bind
-from qnsd.lan.bind import select_bind
+from qnsd.lan.bind import parse_ip_port, select_bind
 from qnsd.lan.contract import (
+    HANDSHAKE_TIMEOUT_S,
+    MAX_CONN_PER_IP,
+    MAX_CONN_TOTAL,
     MAX_FRAGMENTS,
     MAX_MESSAGES,
     MAX_QUEUE_ITEMS,
@@ -33,7 +37,7 @@ from qnsd.lan.frame import read_frame
 from qnsd.lan.node import LanNode, LanTLSAdapter
 from qnsd.lan.queue import QueueStore, new_item
 from qnsd.lan.router import RoutePlanner
-from qnsd.lan.session import _Rate, _split
+from qnsd.lan.session import _Rate, _split, handshake_drop, require_ack_level
 from qnsd.lan.sign import sign_document
 from qnsd.node import DEFAULT_BIND
 from qnsd.photon import loads, photon_id
@@ -85,6 +89,10 @@ def test_bind_refuses_wan_public_cgnat_and_bare_loopback() -> None:
         ("*", "QNS-LAN-WAN"),
         ("8.8.8.8", "QNS-LAN-WAN"),
         ("100.64.0.1", "QNS-LAN-WAN"),
+        ("192.0.2.1", "QNS-LAN-WAN"),
+        ("192.0.2.255", "QNS-LAN-WAN"),
+        ("198.18.0.1", "QNS-LAN-WAN"),
+        ("198.19.255.254", "QNS-LAN-WAN"),
         ("127.0.0.1", "QNS-LAN-BIND"),
     )
     for host, code in cases:
@@ -92,6 +100,18 @@ def test_bind_refuses_wan_public_cgnat_and_bare_loopback() -> None:
             select_bind(host, allow_loopback=False)
         assert exc.value.code == code
     assert select_bind("127.0.0.1", allow_loopback=True) == "127.0.0.1"
+    for host in ("192.0.2.1", "198.18.0.1", "198.19.255.254"):
+        with pytest.raises(LanRefuse) as exc:
+            parse_ip_port(f"{host}:8894")
+        assert exc.value.code == "QNS-LAN-WAN"
+    text = (ROOT / "qnsd" / "lan" / "bind.py").read_text(encoding="utf-8")
+    assert "Linux-only" in text
+    assert "fails closed" in text
+    assert "192.0.2.0/24" in text
+    assert "198.18.0.0/15" in text
+    note = (ROOT / "qnsd" / "lan" / "node.py").read_text(encoding="utf-8")
+    assert "FED-GAP" in note
+    assert "QNS-LAN-RETRY" in note
 
 
 def test_frame_length_is_refused_before_the_body() -> None:
@@ -244,9 +264,11 @@ def test_peer_unavailable_then_restart_flushes(tmp_path: Path) -> None:
         assert down.outcome == "temporary"
         assert down.code == "QNS-LAN-UNAVAILABLE"
         assert down.security is False
+        assert down.transport_accepted is False
         assert down.live is False
         second = node_a.send_payload(node_b.handle, {"text": "queued-two"})
         assert second.code == "QNS-LAN-UNAVAILABLE"
+        assert second.transport_accepted is False
         node_a.close()
         started = node_b.listen("127.0.0.1", port, allow_loopback=True)
         assert started["live"] is False
@@ -254,6 +276,7 @@ def test_peer_unavailable_then_restart_flushes(tmp_path: Path) -> None:
         later = datetime.now(timezone.utc) + timedelta(seconds=5)
         results = resumed.flush(now=later)
         assert [item.ack_level for item in results] == ["stored", "stored"]
+        assert all(item.transport_accepted is True for item in results)
         assert all(item.live is False for item in results)
         assert node_b.verify()["ok"] is True
         assert len(list((tmp_path / "b" / "data" / "lan" / "inbox").glob("*.json"))) == 2
@@ -272,6 +295,7 @@ def test_bad_signature_is_a_security_refusal(tmp_path: Path) -> None:
         assert result.code == "QNS-LAN-REFUSED"
         assert result.outcome == "refused"
         assert result.security is True
+        assert result.transport_accepted is True
         assert result.live is False
         assert second.calls == 0
         assert list((tmp_path / "b" / "data" / "lan" / "inbox").glob("*.json")) == []
@@ -358,10 +382,17 @@ def test_revoked_peer_and_unapproved_source(tmp_path: Path) -> None:
     node_b.add_peer(node_a.public_material(), "10.1.0.1:9")
     try:
         spoofed = node_a.send_payload(node_b.handle, {"text": MARKER})
-        assert spoofed.security is True
-        assert spoofed.code == "QNS-LAN-REFUSED"
+        assert spoofed.outcome == "temporary"
+        assert spoofed.code == "QNS-LAN-UNAVAILABLE"
+        assert spoofed.security is False
+        assert spoofed.transport_accepted is False
         assert spoofed.live is False
-        assert MARKER not in node_b.log_text()
+        queued = node_a.queue.get(spoofed.packet_id)
+        assert queued is not None
+        assert queued["state"] in ("queued", "waiting")
+        log = node_b.log_text()
+        assert '"code": "QNS-LAN-REFUSED"' in log or '"code":"QNS-LAN-REFUSED"' in log
+        assert MARKER not in log
         assert list((tmp_path / "b2" / "data" / "lan" / "inbox").glob("*.json")) == []
     finally:
         _close(node_a, node_b)
@@ -452,6 +483,104 @@ def test_security_refusal_does_not_try_a_lower_route() -> None:
     assert result.outcome == "absent"
     assert result.code == "QNS-LAN-ABSENT"
     assert result.live is False
+
+
+def test_handshake_drop_is_temporary_and_acks_stay_ordered() -> None:
+    dropped = handshake_drop(ssl.SSLEOFError("eof"))
+    assert dropped is not None
+    assert dropped.code == "QNS-LAN-UNAVAILABLE"
+    assert dropped.outcome == "temporary"
+    assert dropped.security is False
+    assert dropped.transport_accepted is False
+    reset = handshake_drop(ConnectionResetError())
+    assert reset is not None and reset.code == "QNS-LAN-UNAVAILABLE" and reset.security is False
+    timed = handshake_drop(TimeoutError())
+    assert timed is not None and timed.code == "QNS-LAN-TIMEOUT" and timed.security is False
+    assert handshake_drop(ssl.SSLError("certificate verify failed")) is None
+    require_ack_level([], "received")
+    require_ack_level(["received"], "verified")
+    require_ack_level(["received", "verified"], "stored")
+    with pytest.raises(LanRefuse) as exc:
+        require_ack_level([], "stored")
+    assert exc.value.code == "QNS-LAN-MALFORMED"
+    assert exc.value.security is True
+
+
+def test_connection_caps_use_the_named_constants(tmp_path: Path) -> None:
+    node = LanNode(tmp_path / "caps", enabled=False)
+    assert MAX_CONN_PER_IP == 4
+    for index in range(MAX_CONN_PER_IP):
+        assert node._admit_conn("10.9.9.9") is True, index
+    assert node._admit_conn("10.9.9.9") is False
+    node._release_conn("10.9.9.9")
+    while node.connection_count():
+        node._release_conn("10.9.9.9")
+    for index in range(MAX_CONN_TOTAL):
+        assert node._admit_conn(f"10.8.0.{index + 1}") is True
+    assert node._admit_conn("10.8.1.1") is False
+    assert node.connection_count() == MAX_CONN_TOTAL
+    assert node.capabilities()["live"] is False
+
+
+def test_idle_connections_time_out_and_do_not_drop_the_packet(tmp_path: Path) -> None:
+    node_a, node_b, started = _pair(tmp_path)
+    idles: list[socket.socket] = []
+    try:
+        for _ in range(MAX_CONN_PER_IP):
+            idles.append(socket.create_connection(("127.0.0.1", started["port"]), timeout=2))
+        deadline = time.monotonic() + 2
+        while node_b.connection_count() < MAX_CONN_PER_IP and time.monotonic() < deadline:
+            time.sleep(0.05)
+        assert node_b.connection_count() == MAX_CONN_PER_IP
+        result = node_a.send_payload(node_b.handle, {"text": MARKER})
+        assert result.live is False
+        assert result.outcome == "temporary"
+        assert result.security is False
+        assert result.transport_accepted is False
+        assert result.code in ("QNS-LAN-UNAVAILABLE", "QNS-LAN-TIMEOUT")
+        queued = node_a.queue.get(result.packet_id)
+        assert queued is not None
+        assert queued["state"] in ("queued", "waiting")
+        close_by = time.monotonic() + HANDSHAKE_TIMEOUT_S + 1.5
+        while time.monotonic() < close_by:
+            if node_b.connection_count() == 0 and _idle_closed(idles):
+                break
+            time.sleep(0.1)
+        assert node_b.connection_count() == 0
+        assert _idle_closed(idles)
+        later = datetime.now(timezone.utc) + timedelta(seconds=5)
+        flushed = node_a.flush(now=later)
+        assert flushed
+        assert flushed[-1].ack_level == "stored"
+        assert flushed[-1].transport_accepted is True
+        assert flushed[-1].live is False
+        assert node_b.capabilities()["cross_host_proven"] is False
+        assert node_b.capabilities()["live"] is False
+    finally:
+        for sock in idles:
+            try:
+                sock.close()
+            except OSError:
+                pass
+        _close(node_a, node_b)
+
+
+def _idle_closed(sockets: list[socket.socket]) -> bool:
+    closed = 0
+    for sock in sockets:
+        sock.settimeout(0.05)
+        try:
+            data = sock.recv(1)
+        except (socket.timeout, TimeoutError, BlockingIOError):
+            return False
+        except OSError:
+            closed += 1
+            continue
+        if data == b"":
+            closed += 1
+        else:
+            return False
+    return closed == len(sockets)
 
 
 def test_relay_client_is_not_imported() -> None:
