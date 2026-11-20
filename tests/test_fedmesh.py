@@ -776,12 +776,15 @@ def test_runtime_fixture_handle_envelope_and_isolation() -> None:
         nonce=nonce,
         ephemeral_private=eph,
     )
-    assert env["v"] == ENVELOPE_V2
+    assert env["v"] == MSG_VERSION
     assert MSG_VERSION == "FED-MESH-1.0"
     assert env["handle"] == "#CPV0CWYPXP4"
     assert "ciphertext" in env
     assert "ct" not in env
-    assert open_envelope(enc_private, sender, env) == inner
+    with pytest.raises(QNMRefuse) as downgrade:
+        open_envelope(enc_private, sender, env)
+    assert downgrade.value.code == "FED-DOWNGRADE"
+    assert open_envelope(enc_private, sender, env, allow_v1=True) == inner
 
 
 def test_bootstrap_is_required(tmp_path: Path) -> None:

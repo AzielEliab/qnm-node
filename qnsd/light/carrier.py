@@ -83,7 +83,8 @@ class SimulatedHardware:
         self.samples = _samples_for(framed)
         return {
             "ok": True,
-            "mock": False,
+            "mock": True,
+            "simulated": True,
             "live": False,
             "real_hardware": False,
             "hardware": self.hardware,
@@ -98,7 +99,8 @@ class SimulatedHardware:
         except QNSRefuse as exc:
             return {
                 "ok": False,
-                "mock": False,
+                "mock": True,
+                "simulated": True,
                 "live": False,
                 "real_hardware": False,
                 "hardware": self.hardware,
@@ -108,7 +110,8 @@ class SimulatedHardware:
             }
         return {
             "ok": True,
-            "mock": False,
+            "mock": True,
+            "simulated": True,
             "live": False,
             "real_hardware": False,
             "hardware": self.hardware,

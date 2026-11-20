@@ -54,6 +54,7 @@ LINK_GOLDEN = "d63e1cadeff11c7cae823dd5f9dba988b99b3674d8ead7bf6b862f60ddf1cc72"
 HANDLE_GOLDEN = "#CPV0CWYPXP4"
 KEY_ID_GOLDEN = "65b60673d6ed884bf01c2c222d82ada0740f29ac3355d6a925c81f17f47a27b8"
 VECTOR_RECEIPT = "49ef88c622177cd9662ea63d147589c9cea6c32adede83b7e7d127f853022dba"
+RELAY_ENVELOPE_ID = "afa667dde9be1843de142f04150481065af073ccbae5d425839d81ab7297e279"
 ENVELOPE_ID_GOLDEN = "8841b5627260fbf2428b514af62f6ac49bfb0c8ad919c12204cb8159576695c2"
 SIGN_SEED = bytes.fromhex(
     "0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20"
@@ -235,17 +236,39 @@ def test_envelope_signature_and_cipher_golden() -> None:
         nonce=bytes.fromhex("81" * 12),
         ephemeral_private=X25519PrivateKey.from_private_bytes(bytes.fromhex("71" * 32)),
     )
-    assert env["v"] == ENVELOPE_V2
-    assert MSG_VERSION == "FED-MESH-1.0"
+    assert env["v"] == MSG_VERSION == "FED-MESH-1.0"
     assert message_info(sender.handle, recip.handle, 1) == b"FED-MESH-1.0|#CPV0CWYPXP4|#936AJZW9JFZ|1"
-    assert envelope_id(env) == ENVELOPE_ID_GOLDEN
+    assert envelope_id(env) == RELAY_ENVELOPE_ID
     assert env["sig"] == (
+        "f7YLOvTM9NxBcorhGnwQIXiDocHdTUCJBaWe_qgttQYRvbtGyJryJWh-SHTMUnCwWhvxdwsvJOnPytqxGGvWCw"
+    )
+    assert env["ciphertext"] == "oKX8t_YeJATC55lVAziGbh02J8-Rb_GsVLAOafoo-dw772se97pUXKovZC5EQSU"
+    verify_envelope(env)
+    with pytest.raises(QNMRefuse) as downgrade:
+        open_envelope(recip.box_private, recip.card, env)
+    assert downgrade.value.code == "FED-DOWNGRADE"
+    opened = open_envelope(recip.box_private, recip.card, env, allow_v1=True)
+    assert opened["text"] == "freeze"
+    pinned = seal_envelope(
+        private_key=sender.sign_private,
+        box_private=sender.box_private,
+        sender=sender.card,
+        recipient_card=recip.card,
+        seq=1,
+        prev=GENESIS_PREV,
+        purpose="msg",
+        plaintext={"kind": "note", "text": "freeze"},
+        nonce=bytes.fromhex("81" * 12),
+        ephemeral_private=X25519PrivateKey.from_private_bytes(bytes.fromhex("71" * 32)),
+        version=ENVELOPE_V2,
+    )
+    assert pinned["v"] == ENVELOPE_V2
+    assert envelope_id(pinned) == ENVELOPE_ID_GOLDEN
+    assert pinned["sig"] == (
         "V8vLneR763JC0kFsn1cl2zPaKZTzcnBF1V_4c4l74Gi0vsgF1JklzKjNyZcSPhX2TPWsE91OPfyASOB7BHXBDw"
     )
-    assert env["ciphertext"] == "oKX8t_YeJATC55lVAziGbh02J8-Rb_GsVLAOafoo-cas-JPygj8yVbGiD0mGgR8"
-    verify_envelope(env)
-    opened = open_envelope(recip.box_private, recip.card, env)
-    assert opened["text"] == "freeze"
+    assert pinned["ciphertext"] == "oKX8t_YeJATC55lVAziGbh02J8-Rb_GsVLAOafoo-cas-JPygj8yVbGiD0mGgR8"
+    assert open_envelope(recip.box_private, recip.card, pinned)["text"] == "freeze"
     tampered = dict(env)
     tampered["sig"] = env["sig"][:-1] + ("A" if env["sig"][-1] != "A" else "B")
     with pytest.raises(QNMRefuse) as bad:

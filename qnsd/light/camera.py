@@ -13,7 +13,8 @@ class Camera:
     def __init__(self, deny: bool = False) -> None:
         self.deny = bool(deny)
         self.frames: list[bytes] = []
-        self.mock = False
+        self.mock = True
+        self.simulated = True
         self.real_hardware = False
         self.live = False
 
@@ -24,7 +25,8 @@ class Camera:
                 "perm": True,
                 "code": "QNS-CAMERA-DENY",
                 "detail": "camera deny",
-                "mock": False,
+                "mock": True,
+                "simulated": True,
                 "live": False,
                 "real_hardware": False,
                 "hardware": "simulated",
@@ -33,7 +35,8 @@ class Camera:
             self.frames.append(frame)
         return {
             "ok": True,
-            "mock": False,
+            "mock": True,
+            "simulated": True,
             "live": False,
             "real_hardware": False,
             "hardware": "simulated",

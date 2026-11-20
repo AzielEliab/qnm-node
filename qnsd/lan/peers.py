@@ -13,7 +13,7 @@ import stat
 from pathlib import Path
 from typing import Any
 
-from qnm.fedmesh.wire import verify_box_binding, verify_card_rotation
+from qnm.fedmesh.wire import check_rotation_freshness, verify_box_binding, verify_card_rotation
 from qnsd.boot import AUTHOR, _utc_now
 from qnsd.lan.bind import parse_ip_port
 from qnsd.lan.contract import ADAPTER_ID, PACKET_V, LanRefuse
@@ -26,9 +26,15 @@ class PeerDirectory:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         os.chmod(self.path.parent, stat.S_IRWXU)
         self.peers: dict[str, dict[str, Any]] = {}
+        self.seen_rotations: set[str] = set()
+        self._seen_path = self.path.with_name("rotation-seen.json")
         if self.path.is_file():
             self.peers = json.loads(self.path.read_text(encoding="utf-8"))
             self._migrate()
+        if self._seen_path.is_file():
+            seen = json.loads(self._seen_path.read_text(encoding="utf-8"))
+            if isinstance(seen, list):
+                self.seen_rotations = {str(item) for item in seen}
 
     def list_public(self) -> list[dict[str, Any]]:
         rows = []
@@ -97,6 +103,14 @@ class PeerDirectory:
         key_id = str(card.get("key_id") or "")
         if len(key_id) != 64:
             raise LanRefuse("QNS-LAN-IDENTITY", "peer pin must be the full public key", outcome="refused", security=True)
+        prior = self.peers.get(key_id)
+        if prior and str(prior.get("key_status") or "") in ("rotated", "revoked"):
+            raise LanRefuse(
+                "QNS-LAN-IDENTITY",
+                "rotated or revoked key cannot be re-pinned",
+                outcome="refused",
+                security=True,
+            )
         for row in self.peers.values():
             if row.get("handle") == handle and row.get("key_status") == "active" and str(row["card"].get("key_id")) != key_id:
                 raise LanRefuse(
@@ -115,13 +129,32 @@ class PeerDirectory:
         if prev is None or prev.get("key_status") != "active":
             raise LanRefuse("QNS-LAN-IDENTITY", "previous key is not an active pin", outcome="refused", security=True)
         verify_card_rotation(str(prev["card"]["sign_pub"]), card, rotation)
+        try:
+            check_rotation_freshness(
+                rotation,
+                prev_rot_seq=int(prev.get("rot_seq") or 0),
+                seen_sigs=self.seen_rotations,
+            )
+        except Exception as exc:
+            from qnm.boot import QNMRefuse
+
+            if isinstance(exc, QNMRefuse):
+                raise LanRefuse(exc.code, exc.detail, outcome="refused", security=True) from exc
+            raise
         pem = str(cert_pem or "")
         if cert_common_name(pem) != str(card["handle"]):
             raise LanRefuse("QNS-LAN-IDENTITY", "certificate name is not the handle", outcome="refused", security=True)
         parse_ip_port(address)
         prev["key_status"] = "rotated"
         prev["rotated_to"] = str(card["key_id"])
-        return self._pin(card, cert_pem, address, prev_key_id=prev_id)
+        prev["rot_seq"] = int(rotation["rot_seq"])
+        self.seen_rotations.add(str(rotation.get("sig") or ""))
+        pinned = self._pin(card, cert_pem, address, prev_key_id=prev_id)
+        row = self.peers[str(card["key_id"])]
+        row["rot_seq"] = int(rotation["rot_seq"])
+        self._save()
+        self._save_seen()
+        return pinned
 
     def _pin(self, card: dict[str, Any], cert_pem: str, address: str, prev_key_id: str = "") -> dict[str, Any]:
         handle = str(card["handle"])
@@ -211,3 +244,10 @@ class PeerDirectory:
         tmp.write_text(text, encoding="utf-8")
         os.chmod(tmp, stat.S_IRUSR | stat.S_IWUSR)
         tmp.replace(self.path)
+
+    def _save_seen(self) -> None:
+        text = json.dumps(sorted(self.seen_rotations), indent=2) + "\n"
+        tmp = self._seen_path.with_suffix(".json.tmp")
+        tmp.write_text(text, encoding="utf-8")
+        os.chmod(tmp, stat.S_IRUSR | stat.S_IWUSR)
+        tmp.replace(self._seen_path)

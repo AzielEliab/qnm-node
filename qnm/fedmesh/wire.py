@@ -19,14 +19,21 @@ Open alignment points:
 5. Ed25519 signature over the canonical object with ``sig`` removed.
 6. Message bodies use ephemeral X25519, HKDF-SHA256 salt
    ``FED-MESH-1.0``, info ``FED-MESH-1.0|from|to|seq`` (not sorted),
-   AES-256-GCM, 12-byte nonce. Envelope v2
-   (``FED-MESH-ENVELOPE-2``) binds sender, recipient, seq, type, and
-   version into the AEAD as associated data, the same canonical-JSON
-   additional-data rule as aziel-runtime ``src/transport/envelope-v2.js``.
-   Envelope v1 (``FED-MESH-ENVELOPE-1`` and the older ``FED-MESH-1.0``
-   body with no associated data) is refused on open unless the caller
-   passes ``allow_v1=True``. The default is strict v2. Pinned peers
-   do not pass that flag.
+   AES-256-GCM, 12-byte nonce. ``seal_envelope`` defaults to
+   ``FED-MESH-1.0`` so an upstream aziel-runtime relay that accepts
+   only that version still sees a compatible envelope. Pinned LAN
+   peers pass ``version=FED-MESH-ENVELOPE-2``. That v2 header binding
+   is modeled on aziel-runtime ``src/transport/envelope-v2.js`` and is
+   not the same construction: the runtime file uses version and HKDF
+   salt ``AZP-NS-1.0``, info
+   ``version|network_id|message_id|nonce``, and associated data
+   ``version, network_id, message_id, sender_ephemeral_key,
+   sender_signing_key, recipient_hint, created_at, expires_at, nonce,
+   route_class``. This daemon's v2 associated data is
+   ``sender, recipient, seq, type, version``. Open defaults to strict
+   v2 (``allow_v1=False``). ``FED-MESH-ENVELOPE-1`` and ``FED-MESH-1.0``
+   decrypt only when the caller passes ``allow_v1=True``. Pinned LAN
+   peers do not pass that flag.
    The recipient key is that handle's static X25519 key. A later leak
    of the recipient key opens old bodies; this process does not claim
    forward secrecy.
@@ -48,7 +55,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import json
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from qnm.boot import AUTHOR, QNMRefuse
@@ -278,8 +285,28 @@ def verify_box_binding(card: dict[str, Any]) -> bytes:
     return raw
 
 
-def card_rotation_core(prev_key_id: str, card: dict[str, Any]) -> dict[str, Any]:
+def _rotation_expiry(hours: int = 24) -> str:
+    moment = datetime.now(timezone.utc) + timedelta(hours=hours)
+    return moment.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def _parse_rotation_expiry(text: str) -> datetime:
+    try:
+        return datetime.strptime(str(text), "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
+    except ValueError as exc:
+        raise QNMRefuse("FED-TAMPER", "rotation expiry refused") from exc
+
+
+def card_rotation_core(
+    prev_key_id: str,
+    card: dict[str, Any],
+    *,
+    rot_seq: int,
+    expires: str,
+) -> dict[str, Any]:
     """Statement a new card must carry, signed by the previous signing key."""
+    if type(rot_seq) is not int or rot_seq < 1:
+        raise QNMRefuse("FED-TAMPER", "rotation sequence refused")
     return {
         "v": CARD_ROTATE_V,
         "author": AUTHOR,
@@ -290,13 +317,27 @@ def card_rotation_core(prev_key_id: str, card: dict[str, Any]) -> dict[str, Any]
         "sign_pub": str(card["sign_pub"]),
         "box_pub": str(card["box_pub"]),
         "box_sig": str(card["box_sig"]),
+        "rot_seq": int(rot_seq),
+        "expires": str(expires),
     }
 
 
-def sign_card_rotation(private_key: Any, prev_key_id: str, new_card: dict[str, Any]) -> dict[str, Any]:
+def sign_card_rotation(
+    private_key: Any,
+    prev_key_id: str,
+    new_card: dict[str, Any],
+    *,
+    rot_seq: int = 1,
+    expires: str | None = None,
+) -> dict[str, Any]:
     """Sign ``new_card`` with the key that currently owns ``prev_key_id``."""
     verify_box_binding(new_card)
-    core = card_rotation_core(prev_key_id, new_card)
+    core = card_rotation_core(
+        prev_key_id,
+        new_card,
+        rot_seq=rot_seq,
+        expires=expires or _rotation_expiry(),
+    )
     signed = dict(core)
     signed["sig"] = _sign(private_key, canonical(core))
     return signed
@@ -315,11 +356,37 @@ def verify_card_rotation(prev_sign_pub: str, new_card: dict[str, Any], rotation:
         raise QNMRefuse("FED-TAMPER", "card rotation version refused")
     if str(rotation.get("author") or "") != AUTHOR:
         raise QNMRefuse("FED-TAMPER", "card rotation author refused")
-    core = card_rotation_core(prev_id, new_card)
+    seq = rotation.get("rot_seq")
+    if type(seq) is not int or seq < 1:
+        raise QNMRefuse("FED-TAMPER", "rotation sequence refused")
+    expires = str(rotation.get("expires") or "")
+    _parse_rotation_expiry(expires)
+    core = card_rotation_core(prev_id, new_card, rot_seq=seq, expires=expires)
     for key, value in core.items():
         if rotation.get(key) != value:
             raise QNMRefuse("FED-TAMPER", "rotation does not bind the new card")
     _verify(raw, str(rotation.get("sig") or ""), canonical(core))
+
+
+def check_rotation_freshness(
+    rotation: dict[str, Any],
+    *,
+    prev_rot_seq: int,
+    seen_sigs: set[str],
+    now: datetime | None = None,
+) -> None:
+    """Refuse expiry, replay, and a sequence that does not move forward."""
+    seq = rotation.get("rot_seq")
+    if type(seq) is not int or seq < 1:
+        raise QNMRefuse("FED-TAMPER", "rotation sequence refused")
+    if seq <= int(prev_rot_seq):
+        raise QNMRefuse("FED-FORK", "rotation sequence rolled back")
+    moment = now or datetime.now(timezone.utc)
+    if moment > _parse_rotation_expiry(str(rotation.get("expires") or "")):
+        raise QNMRefuse("FED-TAMPER", "rotation expired")
+    sig = str(rotation.get("sig") or "")
+    if not sig or sig in seen_sigs:
+        raise QNMRefuse("FED-REPLAY", "rotation already applied")
 
 
 def make_anchor(
@@ -577,14 +644,21 @@ def seal_envelope(
     plaintext: dict[str, Any],
     nonce: bytes | None = None,
     ephemeral_private: Any = None,
+    version: str = MSG_VERSION,
 ) -> dict[str, Any]:
     """Encrypt plaintext to the recipient and sign the runtime envelope.
 
     ``purpose`` stays inside the ciphertext (note, file, object, or
     task). Relays see the runtime message fields, not the purpose.
     ``box_private`` is the sender's static key and is not the message key.
+
+    ``version`` defaults to ``FED-MESH-1.0`` so an aziel-runtime relay
+    that accepts only that version is not broken. Pinned LAN peers pass
+    ``FED-MESH-ENVELOPE-2``.
     """
     del box_private
+    if version not in (MSG_VERSION, ENVELOPE_V2):
+        raise QNMRefuse("FED-TAMPER", "seal version must be FED-MESH-1.0 or FED-MESH-ENVELOPE-2")
     verify_box_binding(recipient_card)
     verify_box_binding(sender)
     if purpose not in ("msg", "task"):
@@ -597,11 +671,11 @@ def seal_envelope(
         plaintext=canonical(plaintext),
         ephemeral_private=ephemeral_private,
         nonce=nonce,
-        version=ENVELOPE_V2,
+        version=version,
         msg_type="msg",
     )
     signed = {
-        "v": ENVELOPE_V2,
+        "v": version,
         "kind": "msg",
         "handle": sender["handle"],
         "public_key": _signing_public_b64url(private_key),

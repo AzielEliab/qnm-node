@@ -39,8 +39,9 @@ python scripts/qns_lan.py --data-dir "$HOME/qns-lan" show > "$HOME/qns-public.js
 ```
 
 `show` prints the public card, the certificate PEM, the cert sha256,
-and `machine_id` from `/etc/machine-id` when that file is present.
-It does not print the private key and it does not invent a machine id.
+and `machine_id`, a salted SHA-256 of `/etc/machine-id` when that file
+is present. It does not print the raw machine-id or the private key.
+It does not invent an id when the file is missing.
 Confirm the two handles differ and the two `key_id` values differ.
 `key_id` is the SHA-256 of the signing public key. The 11-character
 handle is not the pin. Copy `qns-public.json` to the other machine
@@ -161,9 +162,10 @@ python -m pytest -o addopts= -q tests/test_lan_two_host.py
 Leave `QNS_LAN_TWO_HOST` unset in CI. The send skips. The honesty
 checks in the same file still run. A pass still does not set `live`.
 
-`show` on B writes `machine_id` into `b-public.json`. The sender
-compares that value with its own `/etc/machine-id`. The test then
-reports:
+`show` on B writes `machine_id` into `b-public.json`. That value is
+`SHA-256(b"qns-lan-host-v1" || /etc/machine-id)`, not the raw file.
+The sender compares it with the same hash of its own machine-id. The
+test then reports:
 
 | What you observed | `same_machine` | `second_device` |
 | --- | --- | --- |

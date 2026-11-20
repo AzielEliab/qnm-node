@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import ipaddress
 import json
 import os
@@ -49,11 +50,14 @@ from qnsd.lan.session import client_handshake, handshake_drop, result_from, send
 from qnsd.lan.tlsutil import client_context, ensure_cert, server_context
 from qnsd.photon import make_photon, photon_id
 
-def local_machine_id() -> str:
-    """Host id from /etc/machine-id. Empty when the file is missing.
+_HOST_SALT = b"qns-lan-host-v1"
 
-    This is not a network address and not a claim that two processes
-    are on different computers. Callers compare it; they do not invent it.
+
+def local_machine_id() -> str:
+    """Salted SHA-256 of /etc/machine-id. Empty when the file is missing.
+
+    The raw machine-id is not published. Two processes on one host hash
+    to the same token. The token is not a claim of a second device.
     """
     path = Path("/etc/machine-id")
     if not path.is_file():
@@ -61,7 +65,7 @@ def local_machine_id() -> str:
     text = path.read_text(encoding="utf-8").strip().lower()
     if len(text) < 8 or any(ch not in "0123456789abcdef" for ch in text):
         return ""
-    return text
+    return hashlib.sha256(_HOST_SALT + text.encode("ascii")).hexdigest()
 
 
 def host_facts(address: str, *, local_id: str, peer_id: str, stored: bool) -> dict[str, Any]:
@@ -496,6 +500,7 @@ class LanNode:
             prev=prev,
             purpose="msg",
             plaintext={"kind": "qns-photon", "photon": photon.to_dict()},
+            version="FED-MESH-ENVELOPE-2",
         )
         created = _utc_now()
         expiry = (datetime.now(timezone.utc) + timedelta(seconds=max(1, expiry_s))).strftime("%Y-%m-%dT%H:%M:%SZ")

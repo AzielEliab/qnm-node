@@ -27,7 +27,7 @@ from qnm.fedmesh.wire import (
     sign_card_rotation,
 )
 from qnsd.boot import QNSRefuse
-from qnsd.lan.node import LanNode, host_facts
+from qnsd.lan.node import LanNode, host_facts, local_machine_id
 from qnsd.light.carrier import SimulatedHardware, open_frame, seal_frame
 from qnsd.photon import dumps, loads, make_photon
 
@@ -67,6 +67,7 @@ def _seal(sender, recip, text="freeze"):
         plaintext={"kind": "note", "text": text},
         nonce=bytes.fromhex("81" * 12),
         ephemeral_private=X25519PrivateKey.from_private_bytes(bytes.fromhex("71" * 32)),
+        version=ENVELOPE_V2,
     )
 
 
@@ -305,7 +306,8 @@ def test_simulated_photon_frame_is_not_hardware() -> None:
     assert sent["live"] is False
     assert sent["real_hardware"] is False
     assert sent["hardware"] == "simulated"
-    assert sent["mock"] is False
+    assert sent["mock"] is True
+    assert sent["simulated"] is True
     got = link.receive()
     assert got["ok"] is True
     assert got["live"] is False
@@ -365,3 +367,100 @@ def test_host_facts_do_not_invent_a_second_device() -> None:
     assert unknown["live"] is False
     unstored = host_facts("192.0.2.20:8894", local_id="abc", peer_id="def", stored=False)
     assert unstored["second_device"] is False
+    raw_id = Path("/etc/machine-id")
+    published = local_machine_id()
+    if raw_id.is_file() and published:
+        assert published != raw_id.read_text(encoding="utf-8").strip()
+        assert len(published) == 64
+
+
+def test_relay_seal_defaults_to_v1_and_pinned_seal_is_v2() -> None:
+    sender, recip = _pair()
+    relay = _seal(sender, recip)
+    # _seal forces the pinned version. The relay default does not.
+    bare = seal_envelope(
+        private_key=sender.sign_private,
+        box_private=sender.box_private,
+        sender=sender.card,
+        recipient_card=recip.card,
+        seq=1,
+        prev=GENESIS_PREV,
+        purpose="msg",
+        plaintext={"kind": "note", "text": "relay"},
+    )
+    assert bare["v"] == "FED-MESH-1.0"
+    with pytest.raises(QNMRefuse) as refused:
+        open_envelope(recip.box_private, recip.card, bare)
+    assert refused.value.code == "FED-DOWNGRADE"
+    assert open_envelope(recip.box_private, recip.card, bare, allow_v1=True)["text"] == "relay"
+    assert relay["v"] == ENVELOPE_V2
+    assert open_envelope(recip.box_private, recip.card, relay, allow_v1=False)["text"] == "freeze"
+    lan = (ROOT / "qnsd" / "lan" / "node.py").read_text(encoding="utf-8")
+    assert 'version="FED-MESH-ENVELOPE-2"' in lan
+
+
+def test_rotated_key_cannot_be_reactivated_and_survives_reload(tmp_path: Path) -> None:
+    current = _identity_from_seeds(bytes.fromhex("11" * 32), bytes.fromhex("22" * 32), seal_kind="audit")
+    nxt = _identity_from_seeds(bytes.fromhex("33" * 32), bytes.fromhex("44" * 32), seal_kind="audit")
+    third = _identity_from_seeds(bytes.fromhex("55" * 32), bytes.fromhex("66" * 32), seal_kind="audit")
+    directory = Directory(tmp_path)
+    directory.remember_card(current.card)
+    expired = sign_card_rotation(
+        current.sign_private,
+        current.key_id,
+        nxt.card,
+        rot_seq=1,
+        expires="2000-01-01T00:00:00Z",
+    )
+    with pytest.raises(QNMRefuse) as old:
+        directory.rotate_card(nxt.card, expired)
+    assert old.value.code == "FED-TAMPER"
+    assert directory.key_active(current.key_id) is True
+    rotation = sign_card_rotation(current.sign_private, current.key_id, nxt.card, rot_seq=2)
+    directory.rotate_card(nxt.card, rotation)
+    assert directory.key_active(current.key_id) is False
+    assert directory.key_active(nxt.key_id) is True
+    with pytest.raises(QNMRefuse) as revived:
+        directory.remember_card(current.card)
+    assert revived.value.code == "FED-WRONG-KEY"
+    assert directory.key_active(current.key_id) is False
+    with pytest.raises(QNMRefuse):
+        directory.rotate_card(third.card, rotation)
+    stale = sign_card_rotation(nxt.sign_private, nxt.key_id, third.card, rot_seq=1)
+    with pytest.raises(QNMRefuse) as rolled:
+        directory.rotate_card(third.card, stale)
+    assert rolled.value.code == "FED-FORK"
+    assert directory.key_active(nxt.key_id) is True
+    directory.revoke_key(nxt.key_id)
+    assert directory.key_active(nxt.key_id) is False
+    with pytest.raises(QNMRefuse):
+        directory.remember_card(nxt.card)
+    reloaded = Directory(tmp_path)
+    assert reloaded.key_active(current.key_id) is False
+    assert reloaded.key_active(nxt.key_id) is False
+    with pytest.raises(QNMRefuse):
+        reloaded.remember_card(current.card)
+    with pytest.raises(QNMRefuse):
+        reloaded.rotate_card(third.card, rotation)
+
+
+def test_lan_add_refuses_a_rotated_or_revoked_key(tmp_path: Path) -> None:
+    from qnsd.lan.contract import LanRefuse
+
+    holder = LanNode(tmp_path / "holder", enabled=False)
+    peer = LanNode(tmp_path / "peer", enabled=False)
+    other = LanNode(tmp_path / "other", enabled=False)
+    material = peer.public_material()
+    holder.add_peer(material, "10.1.0.20:8894")
+    holder.revoke(peer.handle, "operator")
+    with pytest.raises(LanRefuse) as refused:
+        holder.add_peer(material, "10.1.0.20:8894")
+    assert refused.value.code == "QNS-LAN-IDENTITY"
+    assert holder.peers.get(peer.handle)["key_status"] == "revoked"
+    fresh = LanNode(tmp_path / "fresh", enabled=False)
+    fresh.add_peer(material, "10.1.0.20:8894")
+    rotation = sign_card_rotation(peer.sign_private, peer.card["key_id"], other.card, rot_seq=1)
+    fresh.rotate_peer(other.public_material(), "10.1.0.30:8894", rotation)
+    with pytest.raises(LanRefuse):
+        fresh.add_peer(material, "10.1.0.20:8894")
+    assert fresh.peers.peers[peer.card["key_id"]]["key_status"] == "rotated"

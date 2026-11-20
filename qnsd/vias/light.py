@@ -114,7 +114,14 @@ class LightAdapter(BaseAdapter):
         try:
             carried = self.emitter.carry(payload)
         except QNSRefuse:
-            carried = {"ok": False, "real_hardware": False, "live": False, "hardware": "simulated"}
+            carried = {
+                "ok": False,
+                "mock": True,
+                "simulated": True,
+                "real_hardware": False,
+                "live": False,
+                "hardware": "simulated",
+            }
         # A named driver is not a lamp. Only real_hardware may set live_link.
         live = bool(carried.get("real_hardware"))
         return ViaResult(

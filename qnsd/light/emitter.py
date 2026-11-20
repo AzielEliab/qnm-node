@@ -16,7 +16,8 @@ class Emitter:
     def __init__(self) -> None:
         self.link = SimulatedHardware()
         self.flashes: list[bytes] = []
-        self.mock = False
+        self.mock = True
+        self.simulated = True
         self.real_hardware = False
         self.live = False
 
@@ -30,7 +31,8 @@ class Emitter:
         self.flashes.append(bytes(bits))
         return {
             "ok": True,
-            "mock": False,
+            "mock": True,
+            "simulated": True,
             "live": False,
             "real_hardware": False,
             "hardware": "simulated",

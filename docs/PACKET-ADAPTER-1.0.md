@@ -97,11 +97,22 @@ public key are unpadded base64url. Relay-visible fields are
 
 Body cipher, not forward secret: ephemeral X25519, HKDF-SHA256,
 salt `FED-MESH-1.0`, info `FED-MESH-1.0|from|to|seq` (not sorted),
-AES-256-GCM, 12-byte nonce. Envelope v2 (`FED-MESH-ENVELOPE-2`)
-binds the header (`sender`, `recipient`, `seq`, `type`, `version`)
-into the AEAD as associated data. The bytes are canonical JSON, the
-same additional-data rule as aziel-runtime `src/transport/envelope-v2.js`.
-Envelope v1 (`FED-MESH-ENVELOPE-1`, and the older `FED-MESH-1.0` body with no associated data) opens only when the caller passes `allow_v1=True`. The default open is strict v2 and raises `FED-DOWNGRADE`. Pinned peers do not pass that flag.
+AES-256-GCM, 12-byte nonce. `seal_envelope` defaults to `FED-MESH-1.0`
+so an aziel-runtime relay (`src/fed-mesh/relay.js` accepts only that
+version; `e2e.js` decrypts with no associated data) still sees a
+compatible envelope. Pinned LAN peers seal `FED-MESH-ENVELOPE-2`.
+That v2 header binding is modeled on
+`src/transport/envelope-v2.js`, not a match for it. The runtime file
+uses version and HKDF salt `AZP-NS-1.0`, info
+`version|network_id|message_id|nonce`, and associated data
+`version, network_id, message_id, sender_ephemeral_key,
+sender_signing_key, recipient_hint, created_at, expires_at, nonce,
+route_class`. This daemon's v2 associated data is
+`sender, recipient, seq, type, version`. Open defaults to strict v2
+and raises `FED-DOWNGRADE` for `FED-MESH-ENVELOPE-1` and `FED-MESH-1.0`
+unless the caller passes `allow_v1=True`. Pinned LAN peers do not
+pass that flag. The relay reader does, because that wire is
+`FED-MESH-1.0`.
 Ciphertext cap `MAX_CT_BYTES` (65536).
 
 `verify_statement` in `qnm/fedmesh/secwire.py` is locked to version
@@ -113,8 +124,9 @@ Pinned envelope v2 (sign seed `0102…1f20`, box seed `4041…5f`, recipient
 sign seed `21`×32, box seed `61`×32, ephemeral `71`×32, nonce
 `81`×12, seq 1, prev 64 zeros, plaintext `{"kind":"note","text":"freeze"}`):
 envelope id `8841b5627260fbf2428b514af62f6ac49bfb0c8ad919c12204cb8159576695c2`.
-The v1 object, associated data absent, still opens. Its envelope id
-was `afa667dde9be1843de142f04150481065af073ccbae5d425839d81ab7297e279`.
+The default relay seal, associated data absent, is envelope id
+`afa667dde9be1843de142f04150481065af073ccbae5d425839d81ab7297e279`.
+It opens only with `allow_v1=True`.
 Both objects are pinned in the tests. The shared body vectors are
 `tests/fixtures/envelope-v2-vectors.json`.
 
