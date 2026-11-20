@@ -95,21 +95,28 @@ is not a live mesh and is not cross-host delivery.
 public key are unpadded base64url. Relay-visible fields are
 `MSG_FIELDS` plus `sig`. Extra fields are `FED-TAMPER`.
 
-Body cipher, unchanged and not forward secret: ephemeral X25519,
-HKDF-SHA256, salt `FED-MESH-1.0`, info
-`FED-MESH-1.0|from|to|seq` (not sorted), AES-256-GCM, 12-byte nonce,
-no additional data. Ciphertext cap `MAX_CT_BYTES` (65536).
+Body cipher, not forward secret: ephemeral X25519, HKDF-SHA256,
+salt `FED-MESH-1.0`, info `FED-MESH-1.0|from|to|seq` (not sorted),
+AES-256-GCM, 12-byte nonce. Envelope v2 (`FED-MESH-ENVELOPE-2`)
+binds the header (`sender`, `recipient`, `seq`, `type`, `version`)
+into the AEAD as associated data. The bytes are canonical JSON, the
+same additional-data rule as aziel-runtime `src/transport/envelope-v2.js`.
+Envelope v1 (`FED-MESH-1.0`) still opens with no associated data.
+Ciphertext cap `MAX_CT_BYTES` (65536).
 
 `verify_statement` in `qnm/fedmesh/secwire.py` is locked to version
 `FED-MESH-1.0` and author `Aziel Eliab`. New packet objects must not
 be forced through that function. They reuse `canonical` and Ed25519.
 They do not change it.
 
-Pinned envelope (sign seed `0102…1f20`, box seed `4041…5f`, recipient
+Pinned envelope v2 (sign seed `0102…1f20`, box seed `4041…5f`, recipient
 sign seed `21`×32, box seed `61`×32, ephemeral `71`×32, nonce
 `81`×12, seq 1, prev 64 zeros, plaintext `{"kind":"note","text":"freeze"}`):
-envelope id `afa667dde9be1843de142f04150481065af073ccbae5d425839d81ab7297e279`.
-The full object is pinned in the freeze test.
+envelope id `8841b5627260fbf2428b514af62f6ac49bfb0c8ad919c12204cb8159576695c2`.
+The v1 object, associated data absent, still opens. Its envelope id
+was `afa667dde9be1843de142f04150481065af073ccbae5d425839d81ab7297e279`.
+Both objects are pinned in the tests. The shared body vectors are
+`tests/fixtures/envelope-v2-vectors.json`.
 
 ### Sequence — implemented
 

@@ -1,4 +1,9 @@
-"""Operator-pinned peer directory. Discovery does not write this."""
+"""Operator-pinned peer directory. Discovery does not write this.
+
+The pin is the SHA-256 of the peer signing public key. The 11-character
+handle is an alias. A second key does not replace that pin unless the
+previous key signs the new card.
+"""
 
 from __future__ import annotations
 
@@ -8,7 +13,7 @@ import stat
 from pathlib import Path
 from typing import Any
 
-from qnm.fedmesh.wire import verify_box_binding
+from qnm.fedmesh.wire import verify_box_binding, verify_card_rotation
 from qnsd.boot import AUTHOR, _utc_now
 from qnsd.lan.bind import parse_ip_port
 from qnsd.lan.contract import ADAPTER_ID, PACKET_V, LanRefuse
@@ -23,6 +28,7 @@ class PeerDirectory:
         self.peers: dict[str, dict[str, Any]] = {}
         if self.path.is_file():
             self.peers = json.loads(self.path.read_text(encoding="utf-8"))
+            self._migrate()
 
     def list_public(self) -> list[dict[str, Any]]:
         rows = []
@@ -30,6 +36,7 @@ class PeerDirectory:
             rows.append(
                 {
                     "handle": row["handle"],
+                    "key_id": row["card"]["key_id"],
                     "key_status": row["key_status"],
                     "addresses": list(row["addresses"]),
                     "adapters": list(row["adapters"]),
@@ -41,10 +48,44 @@ class PeerDirectory:
             )
         return rows
 
+    def _migrate(self) -> None:
+        """Re-key a handle-indexed file by the full public-key pin."""
+        migrated: dict[str, dict[str, Any]] = {}
+        for key, row in list(self.peers.items()):
+            if not isinstance(row, dict):
+                continue
+            card = row.get("card") if isinstance(row.get("card"), dict) else {}
+            key_id = str(card.get("key_id") or "")
+            if len(key_id) != 64:
+                continue
+            migrated[key_id] = row
+            if key != key_id:
+                row["legacy_handle_key"] = str(key)
+        if migrated.keys() != self.peers.keys():
+            self.peers = migrated
+            self._save()
+
     def get(self, handle: str) -> dict[str, Any]:
-        row = self.peers.get(handle)
-        if row is None:
-            raise LanRefuse("QNS-LAN-IDENTITY", "peer is not pinned", outcome="refused", security=True)
+        """Return the pin for ``handle``.
+
+        An active pin wins. A single revoked or rotated row is still
+        returned so the caller can report that status. Two active pins
+        for one handle are a collision and are refused.
+        """
+        rows = [row for row in self.peers.values() if row.get("handle") == handle]
+        active = [row for row in rows if row.get("key_status") == "active"]
+        if len(active) > 1:
+            raise LanRefuse("QNS-LAN-IDENTITY", "peer handle is not a unique pin", outcome="refused", security=True)
+        if len(active) == 1:
+            return active[0]
+        if len(rows) == 1:
+            return rows[0]
+        raise LanRefuse("QNS-LAN-IDENTITY", "peer is not pinned", outcome="refused", security=True)
+
+    def get_key(self, key_id: str) -> dict[str, Any]:
+        row = self.peers.get(str(key_id or ""))
+        if row is None or row.get("key_status") != "active":
+            raise LanRefuse("QNS-LAN-IDENTITY", "peer key is not pinned", outcome="refused", security=True)
         return row
 
     def active(self) -> list[dict[str, Any]]:
@@ -53,6 +94,38 @@ class PeerDirectory:
     def add(self, card: dict[str, Any], cert_pem: str, address: str) -> dict[str, Any]:
         verify_box_binding(card)
         handle = str(card["handle"])
+        key_id = str(card.get("key_id") or "")
+        if len(key_id) != 64:
+            raise LanRefuse("QNS-LAN-IDENTITY", "peer pin must be the full public key", outcome="refused", security=True)
+        for row in self.peers.values():
+            if row.get("handle") == handle and row.get("key_status") == "active" and str(row["card"].get("key_id")) != key_id:
+                raise LanRefuse(
+                    "QNS-LAN-IDENTITY",
+                    "peer allowlist is pinned to a different public key",
+                    outcome="refused",
+                    security=True,
+                )
+        return self._pin(card, cert_pem, address)
+
+    def rotate(self, card: dict[str, Any], cert_pem: str, address: str, rotation: dict[str, Any]) -> dict[str, Any]:
+        """Replace a pin only when the previous key signed the new card."""
+        verify_box_binding(card)
+        prev_id = str((rotation or {}).get("prev_key_id") or "")
+        prev = self.peers.get(prev_id)
+        if prev is None or prev.get("key_status") != "active":
+            raise LanRefuse("QNS-LAN-IDENTITY", "previous key is not an active pin", outcome="refused", security=True)
+        verify_card_rotation(str(prev["card"]["sign_pub"]), card, rotation)
+        pem = str(cert_pem or "")
+        if cert_common_name(pem) != str(card["handle"]):
+            raise LanRefuse("QNS-LAN-IDENTITY", "certificate name is not the handle", outcome="refused", security=True)
+        parse_ip_port(address)
+        prev["key_status"] = "rotated"
+        prev["rotated_to"] = str(card["key_id"])
+        return self._pin(card, cert_pem, address, prev_key_id=prev_id)
+
+    def _pin(self, card: dict[str, Any], cert_pem: str, address: str, prev_key_id: str = "") -> dict[str, Any]:
+        handle = str(card["handle"])
+        key_id = str(card["key_id"])
         pem = str(cert_pem or "")
         if cert_common_name(pem) != handle:
             raise LanRefuse("QNS-LAN-IDENTITY", "certificate name is not the handle", outcome="refused", security=True)
@@ -66,7 +139,7 @@ class PeerDirectory:
                 "purpose": card.get("purpose"),
                 "author": card.get("author"),
                 "handle": handle,
-                "key_id": card.get("key_id"),
+                "key_id": key_id,
                 "sign_pub": card.get("sign_pub"),
                 "box_pub": card.get("box_pub"),
                 "box_sig": card.get("box_sig"),
@@ -79,10 +152,11 @@ class PeerDirectory:
             "last_success_utc": "",
             "revocation": None,
             "route_state": "DISCOVERED",
+            "prev_key_id": prev_key_id,
         }
-        self.peers[handle] = row
+        self.peers[key_id] = row
         self._save()
-        return {"ok": True, "handle": handle, "cert_sha256": row["cert_sha256"], "live": False}
+        return {"ok": True, "handle": handle, "key_id": key_id, "cert_sha256": row["cert_sha256"], "live": False}
 
     def revoke(self, handle: str, reason: str) -> dict[str, Any]:
         row = self.get(handle)
@@ -93,15 +167,17 @@ class PeerDirectory:
         return {"ok": True, "handle": handle, "key_status": "revoked", "live": False}
 
     def set_state(self, handle: str, state: str) -> None:
-        row = self.peers.get(handle)
-        if row is None:
+        try:
+            row = self.get(handle)
+        except LanRefuse:
             return
         row["route_state"] = state
         self._save()
 
     def mark_success(self, handle: str, utc: str) -> None:
-        row = self.peers.get(handle)
-        if row is None:
+        try:
+            row = self.get(handle)
+        except LanRefuse:
             return
         row["last_success_utc"] = utc
         row["route_state"] = "ACKNOWLEDGED"

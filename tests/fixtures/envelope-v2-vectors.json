@@ -1,0 +1,33 @@
+{
+  "spec": "FED-MESH-ENVELOPE-2",
+  "author": "Aziel Eliab",
+  "hkdf_salt": "FED-MESH-1.0",
+  "hkdf_info": "FED-MESH-1.0|#CPV0CWYPXP4|#936AJZW9JFZ|1",
+  "recipient_box_seed_hex": "6161616161616161616161616161616161616161616161616161616161616161",
+  "recipient_box_public": "QElQLbksojQsP5LaxdbefIXbXfVAeltJls458u-36Cc",
+  "aad_canonical": "{\"recipient\":\"#936AJZW9JFZ\",\"sender\":\"#CPV0CWYPXP4\",\"seq\":1,\"type\":\"msg\",\"version\":\"FED-MESH-ENVELOPE-2\"}",
+  "python": {
+    "sender": "#CPV0CWYPXP4",
+    "recipient": "#936AJZW9JFZ",
+    "seq": 1,
+    "type": "msg",
+    "version": "FED-MESH-ENVELOPE-2",
+    "plaintext": "{\"kind\":\"note\",\"text\":\"freeze\"}",
+    "nonce_hex": "818181818181818181818181",
+    "eph_seed_hex": "7171717171717171717171717171717171717171717171717171717171717171",
+    "eph_public_key": "q08ZeZj8xWzG7WjB2TGvm7Ui7AB0PhgfczCRXfSqMXY",
+    "ciphertext": "oKX8t_YeJATC55lVAziGbh02J8-Rb_GsVLAOafoo-cas-JPygj8yVbGiD0mGgR8"
+  },
+  "js": {
+    "sender": "#CPV0CWYPXP4",
+    "recipient": "#936AJZW9JFZ",
+    "seq": 1,
+    "type": "msg",
+    "version": "FED-MESH-ENVELOPE-2",
+    "plaintext": "from-js",
+    "nonce_hex": "a1a1a1a1a1a1a1a1a1a1a1a1",
+    "eph_seed_hex": "9191919191919191919191919191919191919191919191919191919191919191",
+    "eph_public_key": "B5H1kun98E1E1-DiNQC2zPA1vmlmdkdYmWfmthKhMVA",
+    "ciphertext": "s0dKEaEh6rYaBwrsXWe1rUDb0xAQEhM"
+  }
+}

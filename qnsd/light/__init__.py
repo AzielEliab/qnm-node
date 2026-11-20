@@ -7,7 +7,17 @@ camera-communication of the same photon.
 from __future__ import annotations
 
 from qnsd.light.camera import Camera
+from qnsd.light.carrier import SimulatedHardware, open_frame, seal_frame
 from qnsd.light.codec import PREAMBLE_BITS, decode, encode
 from qnsd.light.emitter import Emitter
 
-__all__ = ["Camera", "Emitter", "PREAMBLE_BITS", "decode", "encode"]
+__all__ = [
+    "Camera",
+    "Emitter",
+    "PREAMBLE_BITS",
+    "SimulatedHardware",
+    "decode",
+    "encode",
+    "open_frame",
+    "seal_frame",
+]

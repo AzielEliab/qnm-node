@@ -758,6 +758,9 @@ class FedService:
     def _card(self, handle: str) -> dict[str, Any]:
         card = self.directory.cards.get(handle)
         if card:
+            verify_box_binding(card)
+            if not self.directory.key_active(str(card.get("key_id") or "")):
+                raise QNMRefuse("FED-WRONG-KEY", "peer key is not the active pin")
             return card
         if not self.upstream_enabled:
             raise QNMRefuse("FED-NO-ROUTE", "no local card for that handle")

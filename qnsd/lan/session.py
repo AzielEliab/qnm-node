@@ -311,10 +311,13 @@ def _check_responder_hello(
         initiator_cert_sha256=node.cert_sha256,
         responder_cert_sha256=presented,
     )
-    from qnm.fedmesh.wire import b64d, b64url_d
+    from qnm.fedmesh.wire import b64d, b64url_d, key_id_from_pubkey
 
-    if b64url_d(str(reply.get("public_key") or "")) != b64d(str(peer["card"]["sign_pub"])):
+    presented_key = b64url_d(str(reply.get("public_key") or ""))
+    if presented_key != b64d(str(peer["card"]["sign_pub"])):
         raise LanRefuse("QNS-LAN-IDENTITY", "signing key is not the pin", outcome="refused", security=True)
+    if key_id_from_pubkey(presented_key) != str(peer["card"].get("key_id") or ""):
+        raise LanRefuse("QNS-LAN-IDENTITY", "peer pin is not the full public key", outcome="refused", security=True)
     verify_bytes(str(reply.get("public_key") or ""), str(reply.get("sig") or ""), canonical(body), signer=peer["handle"])
     if not reply.get("responder_nonce") or len(str(reply["responder_nonce"])) != NONCE_BYTES * 2:
         raise LanRefuse("QNS-LAN-MALFORMED", "responder nonce refused", outcome="permanent", security=True)
@@ -335,10 +338,13 @@ def server_handshake(sock: socket.socket, node: Any, source_ip: str, deadline: f
         raise LanRefuse("QNS-LAN-REVOKED", "peer key is revoked", outcome="refused", security=True)
     if presented != peer["cert_sha256"] or hello.get("initiator_cert_sha256") != presented:
         raise LanRefuse("QNS-LAN-IDENTITY", "certificate pin mismatch", outcome="refused", security=True)
-    from qnm.fedmesh.wire import b64d, b64url_d
+    from qnm.fedmesh.wire import b64d, b64url_d, key_id_from_pubkey
 
-    if b64url_d(str(hello.get("public_key") or "")) != b64d(str(peer["card"]["sign_pub"])):
+    presented_key = b64url_d(str(hello.get("public_key") or ""))
+    if presented_key != b64d(str(peer["card"]["sign_pub"])):
         raise LanRefuse("QNS-LAN-IDENTITY", "signing key is not the pin", outcome="refused", security=True)
+    if key_id_from_pubkey(presented_key) != str(peer["card"].get("key_id") or ""):
+        raise LanRefuse("QNS-LAN-IDENTITY", "peer pin is not the full public key", outcome="refused", security=True)
     if source_ip not in node.peers.approved_hosts(handle):
         raise LanRefuse("QNS-LAN-REFUSED", "source address is not approved", outcome="refused", security=True)
     if hello.get("responder_handle") != node.handle:
