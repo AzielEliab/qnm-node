@@ -896,7 +896,7 @@ class FedService:
                 raise QNMRefuse("FED-REPLAY", "envelope already ingested")
             if env.get("to") != self.owner.handle:
                 raise QNMRefuse("FED-TAMPER", "envelope is not for this node")
-            inner = open_envelope(self.owner.box_private, self.owner.card, env)
+            inner = open_envelope(self.owner.box_private, self.owner.card, env, allow_v1=False)
             plain_peek = inner.get("plaintext") if isinstance(inner.get("plaintext"), dict) else {}
             if str(plain_peek.get("kind") or "") == "task" and not self.edge_on:
                 raise QNMRefuse("FED-EDGE-OFF", "edge compute is off")
@@ -1159,7 +1159,7 @@ class FedService:
                 continue
             if "ciphertext" not in res:
                 continue
-            inner = open_envelope(ident.box_private, ident.card, res)
+            inner = open_envelope(ident.box_private, ident.card, res, allow_v1=False)
             plain = inner.get("plaintext") if isinstance(inner.get("plaintext"), dict) else {}
             raw = b64d(str(plain.get("content_b64") or ""))
             if sha256_hex(raw) != digest:

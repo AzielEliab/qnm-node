@@ -23,7 +23,10 @@ Open alignment points:
    (``FED-MESH-ENVELOPE-2``) binds sender, recipient, seq, type, and
    version into the AEAD as associated data, the same canonical-JSON
    additional-data rule as aziel-runtime ``src/transport/envelope-v2.js``.
-   Envelope v1 (``FED-MESH-1.0``) still opens with no associated data.
+   Envelope v1 (``FED-MESH-ENVELOPE-1`` and the older ``FED-MESH-1.0``
+   body with no associated data) is refused on open unless the caller
+   passes ``allow_v1=True``. The default is strict v2. Pinned peers
+   do not pass that flag.
    The recipient key is that handle's static X25519 key. A later leak
    of the recipient key opens old bodies; this process does not claim
    forward secrecy.
@@ -56,7 +59,11 @@ GENESIS_PREV = "0" * 64
 DEFAULT_RELAY = "https://aziel-runtime.vibelock.workers.dev"
 E2E_ALG = "x25519-hkdf-sha256-aes-256-gcm"
 MSG_VERSION = "FED-MESH-1.0"
+ENVELOPE_V1 = "FED-MESH-ENVELOPE-1"
 ENVELOPE_V2 = "FED-MESH-ENVELOPE-2"
+# Bodies sealed without header associated data. Open refuses these
+# unless the caller sets allow_v1=True.
+LEGACY_ENVELOPE_VERSIONS = frozenset({MSG_VERSION, ENVELOPE_V1})
 CARD_ROTATE_V = "QNS-CARD-ROTATE-1"
 HKDF_SALT = b"FED-MESH-1.0"
 CROCKFORD = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
@@ -400,7 +407,7 @@ def frame_header_aad(*, sender: str, recipient: str, seq: int, header_type: str,
 
 
 def _envelope_aad(*, sender: str, recipient: str, seq: int, msg_type: str, version: str) -> bytes | None:
-    if version == MSG_VERSION:
+    if version in LEGACY_ENVELOPE_VERSIONS:
         return None
     if version != ENVELOPE_V2:
         raise QNMRefuse("FED-TAMPER", "envelope version refused")
@@ -411,6 +418,25 @@ def _envelope_aad(*, sender: str, recipient: str, seq: int, msg_type: str, versi
         header_type=msg_type,
         version=version,
     )
+
+
+def _require_open_version(version: str, *, allow_v1: bool) -> None:
+    """Strict v2 on decrypt. Legacy bodies need an explicit opt-in.
+
+    A missing or v1 version must not fall through to an empty AEAD
+    associated-data check. That would accept a header the ciphertext
+    does not bind.
+    """
+    if version == ENVELOPE_V2:
+        return
+    if version in LEGACY_ENVELOPE_VERSIONS:
+        if allow_v1:
+            return
+        raise QNMRefuse(
+            "FED-DOWNGRADE",
+            f"{version} is refused; strict {ENVELOPE_V2} is required unless allow_v1=True",
+        )
+    raise QNMRefuse("FED-TAMPER", "envelope version refused")
 
 
 def _message_key(shared: bytes, from_handle: str, to_handle: str, seq: int) -> bytes:
@@ -511,11 +537,17 @@ def open_message_body(
     ciphertext: str,
     version: str = ENVELOPE_V2,
     msg_type: str = "msg",
+    allow_v1: bool = False,
 ) -> bytes:
-    """Open a runtime message body with the recipient's static X25519 key."""
+    """Open a runtime message body with the recipient's static X25519 key.
+
+    ``allow_v1`` defaults false. ``FED-MESH-ENVELOPE-1`` and
+    ``FED-MESH-1.0`` are refused until the caller opts in.
+    """
     from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PublicKey
     from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
+    _require_open_version(version, allow_v1=allow_v1)
     try:
         shared = box_private.exchange(X25519PublicKey.from_public_bytes(b64url_d(eph_public_key)))
         key = _message_key(shared, from_handle, to_handle, seq)
@@ -585,8 +617,22 @@ def seal_envelope(
     return envelope
 
 
-def open_envelope(box_private: Any, my_card: dict[str, Any], envelope: dict[str, Any]) -> dict[str, Any]:
-    """Verify the sender and decrypt. Raises FED-TAMPER / FED-WRONG-KEY / FED-E2E."""
+def open_envelope(
+    box_private: Any,
+    my_card: dict[str, Any],
+    envelope: dict[str, Any],
+    *,
+    allow_v1: bool = False,
+) -> dict[str, Any]:
+    """Verify the sender and decrypt.
+
+    The default is strict ``FED-MESH-ENVELOPE-2``. A legacy
+    ``FED-MESH-ENVELOPE-1`` or ``FED-MESH-1.0`` frame raises
+    ``FED-DOWNGRADE`` unless ``allow_v1=True``. Pinned peers leave
+    the flag false. A missing version is not treated as v1.
+    """
+    version = str(envelope.get("v") or "")
+    _require_open_version(version, allow_v1=allow_v1)
     verify_envelope(envelope)
     if envelope["to"] != my_card["handle"]:
         raise QNMRefuse("FED-TAMPER", "envelope is not addressed to this handle")
@@ -598,8 +644,9 @@ def open_envelope(box_private: Any, my_card: dict[str, Any], envelope: dict[str,
         nonce=str(envelope["nonce"]),
         eph_public_key=str(envelope["eph_public_key"]),
         ciphertext=str(envelope["ciphertext"]),
-        version=str(envelope.get("v") or MSG_VERSION),
+        version=version,
         msg_type=str(envelope.get("kind") or "msg"),
+        allow_v1=allow_v1,
     )
     try:
         inner = json.loads(raw.decode("utf-8"))
@@ -621,7 +668,7 @@ def verify_envelope(envelope: dict[str, Any]) -> None:
     if handle_from_pubkey(raw) != str(envelope.get("handle") or ""):
         raise QNMRefuse("FED-WRONG-KEY", "message handle does not match the key")
     signed = message_statement(envelope)
-    if signed.get("v") not in (MSG_VERSION, ENVELOPE_V2) or signed.get("kind") != "msg":
+    if signed.get("v") not in LEGACY_ENVELOPE_VERSIONS | {ENVELOPE_V2} or signed.get("kind") != "msg":
         raise QNMRefuse("FED-TAMPER", "envelope version or kind mismatch")
     ct = b64url_d(str(signed.get("ciphertext") or ""))
     if len(ct) > MAX_CT_BYTES or len(ct) < 16:

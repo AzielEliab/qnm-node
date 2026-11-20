@@ -617,7 +617,8 @@ def _verify_packet(node: Any, peer: dict[str, Any], envelope: dict[str, Any]) ->
         raise LanRefuse("QNS-LAN-MALFORMED", "body refused", outcome="permanent", security=True)
     try:
         verify_envelope(body)
-        inner = open_envelope(node.box_private, node.card, body)
+        # Pinned peers stay on strict v2. A legacy body is a downgrade.
+        inner = open_envelope(node.box_private, node.card, body, allow_v1=False)
     except LanRefuse:
         raise
     except Exception as exc:
@@ -646,7 +647,7 @@ def _store_packet(node: Any, peer: dict[str, Any], envelope: dict[str, Any], pre
         return
     body = envelope["body"]
     node.ledger.preview(str(peer["handle"]), int(body["seq"]), str(body["prev"]), envelope_id(body))
-    inner = open_envelope(node.box_private, node.card, body)
+    inner = open_envelope(node.box_private, node.card, body, allow_v1=False)
     photon = loads(inner["photon"]).to_dict()
     record = {
         "packet_id": packet_id,

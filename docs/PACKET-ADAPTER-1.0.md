@@ -101,7 +101,7 @@ AES-256-GCM, 12-byte nonce. Envelope v2 (`FED-MESH-ENVELOPE-2`)
 binds the header (`sender`, `recipient`, `seq`, `type`, `version`)
 into the AEAD as associated data. The bytes are canonical JSON, the
 same additional-data rule as aziel-runtime `src/transport/envelope-v2.js`.
-Envelope v1 (`FED-MESH-1.0`) still opens with no associated data.
+Envelope v1 (`FED-MESH-ENVELOPE-1`, and the older `FED-MESH-1.0` body with no associated data) opens only when the caller passes `allow_v1=True`. The default open is strict v2 and raises `FED-DOWNGRADE`. Pinned peers do not pass that flag.
 Ciphertext cap `MAX_CT_BYTES` (65536).
 
 `verify_statement` in `qnm/fedmesh/secwire.py` is locked to version

@@ -15,9 +15,11 @@ from qnm.chain import GENESIS_PREV
 from qnm.fedmesh.discover import Directory
 from qnm.fedmesh.identity import _identity_from_seeds
 from qnm.fedmesh.wire import (
+    ENVELOPE_V1,
     ENVELOPE_V2,
     MSG_VERSION,
     b64url,
+    canonical,
     frame_header_aad,
     open_envelope,
     open_message_body,
@@ -68,11 +70,68 @@ def _seal(sender, recip, text="freeze"):
     )
 
 
-def test_v1_envelope_still_opens() -> None:
-    _sender, recip = _pair()
-    opened = open_envelope(recip.box_private, recip.card, V1_ENVELOPE)
+def _resign(sender, envelope: dict) -> dict:
+    body = {key: value for key, value in envelope.items() if key != "sig"}
+    signed = dict(body)
+    signed["sig"] = b64url(sender.sign_private.sign(canonical(body)))
+    return signed
+
+
+def test_v1_envelope_opens_only_with_explicit_opt_in() -> None:
+    sender, recip = _pair()
+    with pytest.raises(QNMRefuse) as refused:
+        open_envelope(recip.box_private, recip.card, V1_ENVELOPE)
+    assert refused.value.code == "FED-DOWNGRADE"
+    with pytest.raises(QNMRefuse) as explicit:
+        open_envelope(recip.box_private, recip.card, V1_ENVELOPE, allow_v1=False)
+    assert explicit.value.code == "FED-DOWNGRADE"
+    opened = open_envelope(recip.box_private, recip.card, V1_ENVELOPE, allow_v1=True)
     assert opened["text"] == "freeze"
     assert V1_ENVELOPE["v"] == MSG_VERSION
+    assert sender.handle == V1_ENVELOPE["handle"]
+
+
+def test_envelope_v1_frame_is_refused_by_default() -> None:
+    """FED-MESH-ENVELOPE-1 must not decrypt unless allow_v1=True."""
+    sender, recip = _pair()
+    legacy = _resign(sender, {**V1_ENVELOPE, "v": ENVELOPE_V1})
+    assert legacy["v"] == "FED-MESH-ENVELOPE-1"
+    with pytest.raises(QNMRefuse) as refused:
+        open_envelope(recip.box_private, recip.card, legacy)
+    assert refused.value.code == "FED-DOWNGRADE"
+    assert "allow_v1=True" in refused.value.detail
+    assert ENVELOPE_V2 in refused.value.detail
+    with pytest.raises(QNMRefuse) as body:
+        open_message_body(
+            recip.box_private,
+            from_handle=legacy["handle"],
+            to_handle=legacy["to"],
+            seq=int(legacy["seq"]),
+            nonce=legacy["nonce"],
+            eph_public_key=legacy["eph_public_key"],
+            ciphertext=legacy["ciphertext"],
+            version=ENVELOPE_V1,
+            msg_type="msg",
+        )
+    assert body.value.code == "FED-DOWNGRADE"
+    opened = open_envelope(recip.box_private, recip.card, legacy, allow_v1=True)
+    assert opened["text"] == "freeze"
+    plain = open_message_body(
+        recip.box_private,
+        from_handle=legacy["handle"],
+        to_handle=legacy["to"],
+        seq=int(legacy["seq"]),
+        nonce=legacy["nonce"],
+        eph_public_key=legacy["eph_public_key"],
+        ciphertext=legacy["ciphertext"],
+        version=ENVELOPE_V1,
+        msg_type="msg",
+        allow_v1=True,
+    )
+    assert b"freeze" in plain
+    session = (ROOT / "qnsd" / "lan" / "session.py").read_text(encoding="utf-8")
+    assert "allow_v1=False" in session
+    assert "allow_v1=True" not in session
 
 
 def test_third_node_cannot_open_a_to_b_frame() -> None:
