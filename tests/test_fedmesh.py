@@ -682,11 +682,13 @@ def test_runtime_fixture_handle_envelope_and_isolation() -> None:
 
     from qnm.fedmesh.secwire import verify_identity_anchor, verify_isolation_statement
     from qnm.fedmesh.wire import (
+        ENVELOPE_V2,
         MSG_VERSION,
         b64url,
         b64url_d,
         canonical,
         decode_pub,
+        frame_header_aad,
         handle_from_pubkey,
         key_id_from_pubkey,
         message_info,
@@ -752,7 +754,14 @@ def test_runtime_fixture_handle_envelope_and_isolation() -> None:
         salt=MSG_VERSION.encode("ascii"),
         info=message_info(vectors["handle"], "#4S11EZW09MD", 2),
     ).derive(shared)
-    assert AESGCM(key).decrypt(nonce, b64url_d(sealed["ciphertext"]), None) == body
+    aad = frame_header_aad(
+        sender=vectors["handle"],
+        recipient="#4S11EZW09MD",
+        seq=2,
+        header_type="msg",
+        version=ENVELOPE_V2,
+    )
+    assert AESGCM(key).decrypt(nonce, b64url_d(sealed["ciphertext"]), aad) == body
 
     inner = {"plaintext": {"kind": "note", "text": "cross-vector"}}
     env = seal_envelope(
@@ -768,10 +777,14 @@ def test_runtime_fixture_handle_envelope_and_isolation() -> None:
         ephemeral_private=eph,
     )
     assert env["v"] == MSG_VERSION
+    assert MSG_VERSION == "FED-MESH-1.0"
     assert env["handle"] == "#CPV0CWYPXP4"
     assert "ciphertext" in env
     assert "ct" not in env
-    assert open_envelope(enc_private, sender, env) == inner
+    with pytest.raises(QNMRefuse) as downgrade:
+        open_envelope(enc_private, sender, env)
+    assert downgrade.value.code == "FED-DOWNGRADE"
+    assert open_envelope(enc_private, sender, env, allow_v1=True) == inner
 
 
 def test_bootstrap_is_required(tmp_path: Path) -> None:

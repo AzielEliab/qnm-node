@@ -38,11 +38,21 @@ python scripts/qns_lan.py --data-dir "$HOME/qns-lan" init
 python scripts/qns_lan.py --data-dir "$HOME/qns-lan" show > "$HOME/qns-public.json"
 ```
 
-`show` prints the public card, the certificate PEM, and the cert sha256.
-It does not print the private key. Confirm the two handles differ.
-Copy `qns-public.json` to the other machine (USB or an already trusted
-channel). Record both handles, both `cert_sha256` values, and both
-commit ids in your notes.
+`show` prints the public card, the certificate PEM, the cert sha256,
+and `machine_id`, a salted SHA-256 of `/etc/machine-id` when that file
+is present. It does not print the raw machine-id or the private key.
+It does not invent an id when the file is missing.
+Confirm the two handles differ and the two `key_id` values differ.
+`key_id` is the SHA-256 of the signing public key. The 11-character
+handle is not the pin. Copy `qns-public.json` to the other machine
+(USB or an already trusted channel). Record both handles, both
+`key_id` values, both `cert_sha256` values, both `machine_id` values,
+and both commit ids in your notes.
+
+Replacing a peer's key is `peer-rotate`. The new card file is that
+peer's new `show` output. The rotation file is a `QNS-CARD-ROTATE-1`
+statement signed by the previous signing key. A card that only
+reuses the old handle is refused.
 
 2. **Pin, then listen.** On B, bind only B's LAN address:
 
@@ -149,8 +159,36 @@ export QNS_LAN_PEER_ADDRESS=192.168.1.20:8894
 python -m pytest -o addopts= -q tests/test_lan_two_host.py
 ```
 
-Leave `QNS_LAN_TWO_HOST` unset in CI. The test skips. A pass still
-does not set `live`.
+Leave `QNS_LAN_TWO_HOST` unset in CI. The send skips. The honesty
+checks in the same file still run. A pass still does not set `live`.
+
+`show` on B writes `machine_id` into `b-public.json`. That value is
+`SHA-256(b"qns-lan-host-v1" || /etc/machine-id)`, not the raw file.
+The sender compares it with the same hash of its own machine-id. The
+test then reports:
+
+| What you observed | `same_machine` | `second_device` |
+| --- | --- | --- |
+| Peer address is loopback | true | false |
+| The two `machine_id` values match | true | false |
+| The ids differ, the address is not loopback, and the packet was stored | false | true |
+| Either id is missing, and the address is not loopback | false | false |
+
+`second_device` stays false when the id is missing. That is not a
+second computer. Set `QNS_LAN_EXPECT_SECOND=1` on the sender only
+when you want the test to fail unless those ids differ. You can pass
+`QNS_LAN_MACHINE_ID` and `QNS_LAN_PEER_MACHINE_ID` instead of the file
+field. Do not copy one machine's id onto the other to make the flag
+true.
+
+```bash
+export QNS_LAN_TWO_HOST=1
+export QNS_LAN_EXPECT_SECOND=1
+export QNS_LAN_DATA="$HOME/qns-lan"
+export QNS_LAN_PEER_FILE=/path/to/b-public.json
+export QNS_LAN_PEER_ADDRESS=192.168.1.20:8894
+python -m pytest -o addopts= -q tests/test_lan_two_host.py
+```
 
 ## Not this procedure
 

@@ -4,9 +4,12 @@ from __future__ import annotations
 
 from typing import Any
 
+from qnsd.boot import QNSRefuse
 from qnsd.light.camera import Camera
+from qnsd.light.carrier import open_frame
 from qnsd.light.codec import decode, encode
 from qnsd.light.emitter import Emitter
+from qnsd.photon import dumps, loads
 from qnsd.vias.base import (
     ABSENT,
     HOOK_PENDING,
@@ -58,6 +61,15 @@ class LightAdapter(BaseAdapter):
                 code="QNS-CAMERA-DENY",
                 detail="camera deny",
             )
+        sealed = _sealed_photon(raw)
+        if sealed is not None:
+            return ViaResult(
+                ok=True,
+                kind=OK,
+                via=self.name,
+                photon=sealed,
+                detail="sealed photon frame",
+            )
         result = decode(raw)
         if result.get("kind") == "probe":
             return ViaResult(
@@ -98,7 +110,20 @@ class LightAdapter(BaseAdapter):
             )
         bits = encode(photon)
         self.emitter.flash(bits)
-        live = bool(ctx.has_phy_driver("light")) and not getattr(self.emitter, "mock", True)
+        payload = dumps(photon)
+        try:
+            carried = self.emitter.carry(payload)
+        except QNSRefuse:
+            carried = {
+                "ok": False,
+                "mock": True,
+                "simulated": True,
+                "real_hardware": False,
+                "live": False,
+                "hardware": "simulated",
+            }
+        # A named driver is not a lamp. Only real_hardware may set live_link.
+        live = bool(carried.get("real_hardware"))
         return ViaResult(
             ok=True,
             kind=OK,
@@ -113,6 +138,16 @@ class LightAdapter(BaseAdapter):
             status=HOOK_PENDING if not live else "REAL",
             code="" if live else "QNS-HOOK-PENDING",
         )
+
+
+def _sealed_photon(raw: bytes) -> dict[str, Any] | None:
+    if not isinstance(raw, (bytes, bytearray)) or not bytes(raw).startswith(b"\xaa\xaa\xaa\xaa"):
+        return None
+    try:
+        payload = open_frame(bytes(raw))
+        return loads(payload).to_dict()
+    except Exception:
+        return None
 
 
 ADAPTER = LightAdapter()

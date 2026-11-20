@@ -1,18 +1,41 @@
 """Flash emitter hook — QNS-CD-1.0.
 
-Mock-friendly. Records OOK frames. No live LED / camera flash.
+The bytes that leave this hook are the shared sealed photon frame,
+carried on simulated hardware. This process does not open a LED.
+``live`` and ``real_hardware`` stay false.
 """
 
 from __future__ import annotations
 
 from typing import Any
 
+from qnsd.light.carrier import SimulatedHardware
+
 
 class Emitter:
     def __init__(self) -> None:
+        self.link = SimulatedHardware()
         self.flashes: list[bytes] = []
         self.mock = True
+        self.simulated = True
+        self.real_hardware = False
+        self.live = False
+
+    def carry(self, payload: bytes) -> dict[str, Any]:
+        result = self.link.transmit(payload)
+        self.flashes.append(bytes(payload))
+        return result
 
     def flash(self, bits: bytes) -> dict[str, Any]:
-        self.flashes.append(bits)
-        return {"ok": True, "mock": True, "count": len(self.flashes)}
+        """Record a codec buffer. The carrier result is still simulated."""
+        self.flashes.append(bytes(bits))
+        return {
+            "ok": True,
+            "mock": True,
+            "simulated": True,
+            "live": False,
+            "real_hardware": False,
+            "hardware": "simulated",
+            "fielded": False,
+            "count": len(self.flashes),
+        }
