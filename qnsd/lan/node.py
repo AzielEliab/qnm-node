@@ -5,6 +5,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import ipaddress
 import json
 import os
 import socket
@@ -47,6 +49,51 @@ from qnsd.lan.router import RoutePlanner
 from qnsd.lan.session import client_handshake, handshake_drop, result_from, send_envelope, serve_connection
 from qnsd.lan.tlsutil import client_context, ensure_cert, server_context
 from qnsd.photon import make_photon, photon_id
+
+_HOST_SALT = b"qns-lan-host-v1"
+
+
+def local_machine_id() -> str:
+    """Salted SHA-256 of /etc/machine-id. Empty when the file is missing.
+
+    The raw machine-id is not published. Two processes on one host hash
+    to the same token. The token is not a claim of a second device.
+    """
+    path = Path("/etc/machine-id")
+    if not path.is_file():
+        return ""
+    text = path.read_text(encoding="utf-8").strip().lower()
+    if len(text) < 8 or any(ch not in "0123456789abcdef" for ch in text):
+        return ""
+    return hashlib.sha256(_HOST_SALT + text.encode("ascii")).hexdigest()
+
+
+def host_facts(address: str, *, local_id: str, peer_id: str, stored: bool) -> dict[str, Any]:
+    """Report whether a LAN exchange was the same machine or a second device.
+
+    ``second_device`` is true only when the packet was stored, the peer
+    address is not loopback, and the two machine ids are present and
+    different. A missing id does not become a second device. ``live``
+    stays false.
+    """
+    host = str(address or "").rsplit(":", 1)[0].strip("[]")
+    try:
+        loopback = ipaddress.ip_address(host).is_loopback
+    except ValueError:
+        loopback = False
+    local = str(local_id or "").strip().lower()
+    peer = str(peer_id or "").strip().lower()
+    ids_known = bool(local) and bool(peer)
+    same = bool(loopback or (ids_known and local == peer))
+    second = bool(stored and ids_known and local != peer and not loopback)
+    return {
+        "same_machine": same,
+        "second_device": second,
+        "host_proven": bool(loopback or ids_known),
+        "live": False,
+        "loopback": loopback,
+    }
+
 
 LOG_KEYS = (
     "event",
@@ -182,15 +229,20 @@ class LanNode:
         }
         return {
             "handle": self.handle,
+            "key_id": self.card.get("key_id"),
             "card": card,
             "cert_pem": self.cert_pem,
             "cert_sha256": self.cert_sha256,
+            "machine_id": local_machine_id(),
             "live": False,
             "author": AUTHOR,
         }
 
     def add_peer(self, material: dict[str, Any], address: str) -> dict[str, Any]:
         return self.peers.add(material["card"], material["cert_pem"], address)
+
+    def rotate_peer(self, material: dict[str, Any], address: str, rotation: dict[str, Any]) -> dict[str, Any]:
+        return self.peers.rotate(material["card"], material["cert_pem"], address, rotation)
 
     def revoke(self, handle: str, reason: str = "operator") -> dict[str, Any]:
         return self.peers.revoke(handle, reason)
@@ -448,6 +500,7 @@ class LanNode:
             prev=prev,
             purpose="msg",
             plaintext={"kind": "qns-photon", "photon": photon.to_dict()},
+            version="FED-MESH-ENVELOPE-2",
         )
         created = _utc_now()
         expiry = (datetime.now(timezone.utc) + timedelta(seconds=max(1, expiry_s))).strftime("%Y-%m-%dT%H:%M:%SZ")

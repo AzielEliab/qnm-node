@@ -45,6 +45,11 @@ def main(argv: list[str] | None = None) -> int:
     peer.add_argument("--card-file", required=True)
     peer.add_argument("--address", required=True)
 
+    rotate = sub.add_parser("peer-rotate")
+    rotate.add_argument("--card-file", required=True)
+    rotate.add_argument("--rotation-file", required=True)
+    rotate.add_argument("--address", required=True)
+
     revoke = sub.add_parser("revoke")
     revoke.add_argument("--handle", required=True)
     revoke.add_argument("--reason", default="operator")
@@ -75,6 +80,12 @@ def main(argv: list[str] | None = None) -> int:
             node = _node(args, enabled=False)
             card = json.loads(Path(args.card_file).read_text(encoding="utf-8"))
             print(json.dumps(node.add_peer(card, args.address), sort_keys=True))
+            return 0
+        if args.cmd == "peer-rotate":
+            node = _node(args, enabled=False)
+            material = json.loads(Path(args.card_file).read_text(encoding="utf-8"))
+            rotation = json.loads(Path(args.rotation_file).read_text(encoding="utf-8"))
+            print(json.dumps(node.rotate_peer(material, args.address, rotation), sort_keys=True))
             return 0
         if args.cmd == "revoke":
             node = _node(args, enabled=False)
